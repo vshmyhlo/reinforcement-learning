@@ -1,5 +1,7 @@
+import logging
 import argparse
 import gym
+import os
 import numpy as np
 import itertools
 import tensorflow as tf
@@ -90,66 +92,97 @@ def build_parser():
     parser.add_argument('--history-size', type=int, default=2000)
     parser.add_argument('--num-last-states', type=int, default=4)
     parser.add_argument('--batch-size', type=int, default=32)
+    parser.add_argument('--experiment-path', type=str, required=True)
+    parser.add_argument('--epochs', type=int, default=1000)
 
     return parser
 
 
-def main():
-    args = build_parser().parse_args()
+class HistoryBuilder(object):
+    def __init__(self, q_function, num_last_states):
+        self._observation = tf.placeholder(tf.uint8, [num_last_states, 210, 160, 3])
+        self._state = preprocess(self._observation)
+        state_value = q_function(tf.expand_dims(self._state, 0), training=False)
+        self._e_greedy_action = epsilon_greedy(state_value)
 
-    q_function = Q(num_actions=6)
+    def __call__(self, env, obs, sess, history_size):
+        s, a = sess.run([self._state, self._e_greedy_action], {self._observation: obs})
 
-    observation = tf.placeholder(tf.uint8, [args.num_last_states, 210, 160, 3])
-    state = preprocess(observation)
-    state_value = q_function(tf.expand_dims(state, 0), training=False)
-    e_greedy_action = epsilon_greedy(state_value)
-
-    with tf.Session() as sess:
-        sess.run(tf.global_variables_initializer())
-        env = LastNStatesEnvironment(gym.make('SpaceInvaders-v0'), num_last_states=args.num_last_states)
-        obs = env.reset()
-        s, a = sess.run([state, e_greedy_action], {observation: obs})
-
-        # build_history
         history = []
-        for _ in tqdm(range(args.history_size)):
+        for _ in tqdm(range(history_size)):
             obs_prime, r, done, _ = env.step(a.squeeze())
-            s_prime, a_prime = sess.run([state, e_greedy_action], {observation: obs_prime})
+            s_prime, a_prime = sess.run([self._state, self._e_greedy_action], {self._observation: obs_prime})
             history.append((s.squeeze(), a.squeeze(), r, s_prime.squeeze()))
 
             if done:
                 obs = env.reset()
-                s, a = sess.run([state, e_greedy_action], {observation: [obs]})
+                s, a = sess.run([self._state, self._e_greedy_action], {self._observation: [obs]})
             else:
                 s, a = s_prime, a_prime
 
-        # train
-        gamma = tf.placeholder(tf.float32, [])
+        return history
 
-        state = tf.placeholder(tf.float32, [None, None, None, args.num_last_states])
-        action = tf.placeholder(tf.int64, [None])
-        reward = tf.placeholder(tf.float32, [None])
-        state_prime = tf.placeholder(tf.float32, [None, None, None, args.num_last_states])
 
-        state_value = q_function(state, training=True)  # TODO: training
-        action_value_pred = utils.select_action_value(state_value, action)
+class Trainer(object):
+    def __init__(self, q_function, num_last_states):
+        global_step = tf.train.get_or_create_global_step()
 
-        state_value_prime = q_function(state_prime, training=False)  # TODO: training
+        gamma = 0.9  # TODO: find gammma
+
+        self._state = tf.placeholder(tf.float32, [None, None, None, num_last_states])
+        self._action = tf.placeholder(tf.int64, [None])
+        self._reward = tf.placeholder(tf.float32, [None])
+        self._state_prime = tf.placeholder(tf.float32, [None, None, None, num_last_states])
+
+        state_value = q_function(self._state, training=True)  # TODO: training
+        action_value_pred = utils.select_action_value(state_value, self._action)
+
+        state_value_prime = q_function(self._state_prime, training=False)  # TODO: training
         action_value_prime = utils.select_action_value(state_value_prime, greedy(state_value_prime))
-        action_value_true = reward + gamma * action_value_prime  # TODO: rename
+        action_value_true = self._reward + gamma * action_value_prime  # TODO: rename
 
         loss = mse_loss(labels=tf.stop_gradient(action_value_true), logits=action_value_pred)  # TODO: stop grad
-        train_step = tf.train.GradientDescentOptimizer(1e-3).minimize(loss)
+        self._train_step = tf.train.GradientDescentOptimizer(1e-3).minimize(loss, global_step=global_step)
 
-        for s, a, r, s_prime in tqdm(batched_history(history, args.batch_size)):  # TODO: shuffle
-            print()
-            print(s.shape)
-            print(a.shape)
-            print(r.shape)
-            print(s_prime.shape)
-            print()
+    def __call__(self, history, sess):
+        epochs = 5  # TODO: num epochs
 
-            sess.run(train_step, {state: s, action: a, reward: r, state_prime: s_prime, gamma: 0.9})
+        for epoch in range(epochs):
+            for s, a, r, s_prime in tqdm(history):  # TODO: shuffle
+                sess.run(
+                    self._train_step, {self._state: s, self._action: a, self._reward: r, self._state_prime: s_prime})
+
+
+def main():
+    logging.basicConfig(level=logging.INFO)
+    args = build_parser().parse_args()
+
+    q_function = Q(num_actions=6)
+    history_build = HistoryBuilder(q_function, num_last_states=args.num_last_states)
+    trainer = Trainer(q_function, num_last_states=args.num_last_states)
+
+    saver = tf.train.Saver()
+    with tf.Session() as sess, tf.summary.FileWriter(args.experiment_path) as writer:
+        if tf.train.latest_checkpoint(args.experiment_path):
+            sess.run(tf.global_variables_initializer())
+        else:
+            saver.restore(sess, tf.train.latest_checkpoint(args.experiment_path))
+
+        # init
+        env = LastNStatesEnvironment(gym.make('SpaceInvaders-v0'), num_last_states=args.num_last_states)
+        obs = env.reset()
+
+        for epoch in range(args.epochs):
+            logging.info('epoch {}'.format(epoch))
+
+            # build history
+            history = history_build(env, obs, sess=sess, history_size=args.history_size)
+
+            # train
+            trainer(batched_history(history, args.batch_size), sess=sess)
+
+            # save
+            saver.save(sess, os.path.join(args.experiment_path, 'model.ckpt'))
 
 
 if __name__ == '__main__':
