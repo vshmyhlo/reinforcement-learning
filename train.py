@@ -21,8 +21,18 @@ def mse_loss(labels, logits, name='mse_loss'):
         return loss
 
 
-def greedy(action_values):
-    return tf.argmax(action_values, -1)
+def greedy(state_value):
+    return tf.argmax(state_value, -1)
+
+
+def epsilon_greedy(state_value, eps=0.1):  # TODO: epsilon anealing
+    p = tf.random_uniform([])
+    shape = tf.shape(state_value)
+
+    return tf.cond(
+        p > eps,
+        lambda: greedy(state_value),
+        lambda: tf.random_uniform([shape[0]], 0, tf.to_int64(shape[1]), dtype=tf.int64))
 
 
 def preprocess(observation):
@@ -32,12 +42,6 @@ def preprocess(observation):
     observation = tf.squeeze(observation, 0)
 
     return observation
-
-
-def epsilon_greedy(action_values):
-    # FIXME:
-
-    return greedy(action_values)
 
 
 # TODO: shuffle
@@ -85,6 +89,7 @@ def build_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--history-size', type=int, default=2000)
     parser.add_argument('--num-last-states', type=int, default=4)
+    parser.add_argument('--batch-size', type=int, default=32)
 
     return parser
 
@@ -96,8 +101,8 @@ def main():
 
     observation = tf.placeholder(tf.uint8, [args.num_last_states, 210, 160, 3])
     state = preprocess(observation)
-    action_values = q_function(tf.expand_dims(state, 0), training=False)
-    e_greedy_action = epsilon_greedy(action_values)
+    state_value = q_function(tf.expand_dims(state, 0), training=False)
+    e_greedy_action = epsilon_greedy(state_value)
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -136,7 +141,7 @@ def main():
         loss = mse_loss(labels=tf.stop_gradient(action_value_true), logits=action_value_pred)  # TODO: stop grad
         train_step = tf.train.GradientDescentOptimizer(1e-3).minimize(loss)
 
-        for s, a, r, s_prime in tqdm(batched_history(history, 32)):  # TODO: shuffle
+        for s, a, r, s_prime in tqdm(batched_history(history, args.batch_size)):  # TODO: shuffle
             print()
             print(s.shape)
             print(a.shape)
