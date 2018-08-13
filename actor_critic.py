@@ -47,7 +47,6 @@ def main():
 
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
-    history = collections.deque(maxlen=args.history_size)
 
     global_step = tf.train.get_or_create_global_step()
     training = tf.placeholder(tf.bool, [])
@@ -101,9 +100,11 @@ def main():
             saver.restore(sess, tf.train.latest_checkpoint(experiment_path))
         else:
             sess.run(tf.global_variables_initializer())
-        sess.run(locals_init)
+
+        history = collections.deque(maxlen=args.history_size)
 
         for i in range(args.episodes):
+            sess.run(locals_init)
             s = env.reset()
             ep_r = 0
 
@@ -134,7 +135,6 @@ def main():
             writer.add_summary(summ, step)
             writer.flush()
             saver.save(sess, os.path.join(experiment_path, 'model.ckpt'))
-            sess.run(locals_init)
 
 
 if __name__ == '__main__':
