@@ -22,8 +22,8 @@ def sample_history(history, batch_size):
 
 def build_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--history-size', type=int, default=10000)
-    parser.add_argument('--value-update-interval', type=int, default=2000)
+    parser.add_argument('--history-size', type=int, default=50000)
+    parser.add_argument('--value-update-interval', type=int, default=5000)
     parser.add_argument('--batch-size', type=int, default=256)
     parser.add_argument('--learning-rate', type=float, default=1e-3)
     parser.add_argument('--experiment-path', type=str, required=True)
@@ -110,12 +110,25 @@ def main():
 
         history = collections.deque(maxlen=args.history_size)
 
+        s = env.reset()
+        for _ in tqdm(range(args.history_size // 10), desc='building history'):
+            a = env.action_space.sample()
+            s_prime, r, d, _ = env.step(a)
+            history.append((s, a, r, s_prime, d))
+
+            if d:
+                s = env.reset()
+            else:
+                s = s_prime
+
+        assert len(history) == args.history_size // 10
+
         for i in range(args.episodes):
             sess.run(locals_init)
             s = env.reset()
             ep_r = 0
 
-            for t in tqdm(itertools.count(), desc='episode {}, history: {}'.format(i, len(history))):
+            for t in tqdm(itertools.count(), desc='episode {}, history size {}'.format(i, len(history))):
                 a = sess.run(action_sample, {state: s.reshape((1, state_size)), training: False}).squeeze(0)
                 s_prime, r, d, _ = env.step(a)
                 ep_r += r
