@@ -5,7 +5,7 @@ import os
 import tensorflow as tf
 import itertools
 from tqdm import tqdm
-from network import ValueFunction, PolicyCategorical
+from network import ValueFunction, PolicyCategorical, PolicyNormal
 
 
 # TODO: do not mask not taken actions?
@@ -26,6 +26,7 @@ def build_parser():
     parser.add_argument('--learning-rate', type=float, default=1e-3)
     parser.add_argument('--experiment-path', type=str, default='./tf_log/ac-mc')
     parser.add_argument('--env', type=str, required=True)
+    parser.add_argument('--a-space', type=str, choices=['cat', 'con'], required=True)
     parser.add_argument('--episodes', type=int, default=1000)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--monitor', action='store_true')
@@ -48,7 +49,10 @@ def main():
 
     # input
     state = tf.placeholder(tf.float32, [None, state_size], name='state')
-    action = tf.placeholder(tf.int32, [None], name='action')
+    if args.a_space == 'cat':
+        action = tf.placeholder(tf.int32, [None], name='action')
+    elif args.a_space == 'con':
+        action = tf.placeholder(tf.float32, [None, *env.action_space.shape], name='action')
     ret = tf.placeholder(tf.float32, [None], name='return')
 
     # critic
@@ -59,11 +63,17 @@ def main():
     critic_loss = tf.reduce_mean(tf.square(td_error))
 
     # actor
-    policy = PolicyCategorical(env.action_space.n)
+    if args.a_space == 'cat':
+        policy = PolicyCategorical(env.action_space.n)
+    elif args.a_space == 'con':
+        policy = PolicyNormal(np.squeeze(env.action_space.shape))
     dist = policy(state, training=training)
     action_sample = dist.sample()
     advantage = tf.stop_gradient(td_error)
-    actor_loss = -tf.reduce_mean(dist.log_prob(action) * advantage)
+    if args.a_space == 'cat':
+        actor_loss = -tf.reduce_mean(dist.log_prob(action) * advantage)
+    elif args.a_space == 'con':
+        actor_loss = -tf.reduce_mean(dist.log_prob(action) * tf.expand_dims(advantage, -1))
     actor_loss -= 1e-3 * tf.reduce_mean(dist.entropy())
 
     # training
