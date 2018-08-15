@@ -74,7 +74,7 @@ def main():
     td_error = td_target_old - state_value
     advantage = tf.stop_gradient(td_error)
     actor_loss = -tf.reduce_mean(dist.log_prob(action) * advantage)
-    actor_loss -= 1e-4 * tf.reduce_mean(dist.entropy())
+    actor_loss -= 1e-3 * tf.reduce_mean(dist.entropy())
 
     # training
     loss = actor_loss + critic_loss * 0.5 + tf.losses.get_regularization_loss()
