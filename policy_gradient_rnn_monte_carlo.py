@@ -1,26 +1,54 @@
-import utils
+import argparse
 import numpy as np
 import gym
 import os
 import tensorflow as tf
 import itertools
 from tqdm import tqdm
-from network import ValueFunction, PolicyCategorical, PolicyNormal
 
 
-# TODO: refactor action space differences
+class PolicyCategorical(tf.layers.Layer):
+    def __init__(self,
+                 num_actions,
+                 name='policy_categorical'):
+        super().__init__(name=name)
+
+        kernel_initializer = tf.contrib.layers.variance_scaling_initializer(
+            factor=2.0, mode='FAN_IN', uniform=False)
+        kernel_regularizer = tf.contrib.layers.l2_regularizer(scale=1e-4)
+
+        self.cell = tf.nn.rnn_cell.GRUCell(
+            32,
+            kernel_initializer=kernel_initializer)
+
+        self.dense = tf.layers.Dense(
+            num_actions,
+            kernel_initializer=kernel_initializer,
+            kernel_regularizer=kernel_regularizer)
+
+    def call(self, input, training):
+        input = tf.expand_dims(input, 0)
+
+        outputs, _ = tf.nn.dynamic_rnn(self.cell, input, dtype=input.dtype)
+        input = tf.squeeze(outputs, 0)
+
+        input = self.dense(input)
+        dist = tf.distributions.Categorical(logits=input)
+
+        return dist
+
+
 # TODO: do not mask not taken actions?
 # TODO: compute advantage out of graph
 # TODO: test build batch
 
 
 def build_parser():
-    parser = utils.ArgumentParser()
+    parser = argparse.ArgumentParser()
     parser.add_argument('--history-size', type=int, default=10000)
     parser.add_argument('--learning-rate', type=float, default=1e-3)
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/ac-mc')
+    parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-rnn-mc')
     parser.add_argument('--env', type=str, required=True)
-    parser.add_argument('--a-space', type=str, choices=['cat', 'con'], required=True)
     parser.add_argument('--episodes', type=int, default=1000)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--monitor', action='store_true')
@@ -30,7 +58,6 @@ def build_parser():
 
 def main():
     args = build_parser().parse_args()
-    utils.fix_seed(args.seed)
     experiment_path = os.path.join(args.experiment_path, args.env)
     env = gym.make(args.env)
     state_size = np.squeeze(env.observation_space.shape)
@@ -44,37 +71,19 @@ def main():
 
     # input
     state = tf.placeholder(tf.float32, [None, state_size], name='state')
-    if args.a_space == 'cat':
-        action = tf.placeholder(tf.int32, [None], name='action')
-    elif args.a_space == 'con':
-        action = tf.placeholder(tf.float32, [None, *env.action_space.shape], name='action')
+    action = tf.placeholder(tf.int32, [None], name='action')
     ret = tf.placeholder(tf.float32, [None], name='return')
 
-    # critic
-    value_function = ValueFunction()
-    state_value = value_function(state, training=training)
-    td_target = tf.stop_gradient(ret)
-    td_error = td_target - state_value
-    critic_loss = tf.reduce_mean(tf.square(td_error))
-
     # actor
-    if args.a_space == 'cat':
-        policy = PolicyCategorical(env.action_space.n)
-    elif args.a_space == 'con':
-        policy = PolicyNormal(np.squeeze(env.action_space.shape))
+    policy = PolicyCategorical(env.action_space.n)
     dist = policy(state, training=training)
     action_sample = dist.sample()
-    if args.a_space == 'con':
-        action_sample = tf.clip_by_value(action_sample, env.action_space.low, env.action_space.high)
-    advantage = tf.stop_gradient(td_error)
-    if args.a_space == 'cat':
-        actor_loss = -tf.reduce_mean(dist.log_prob(action) * advantage)
-    elif args.a_space == 'con':
-        actor_loss = -tf.reduce_mean(dist.log_prob(action) * tf.expand_dims(advantage, -1))
+    advantage = ret
+    actor_loss = -tf.reduce_mean(dist.log_prob(action) * advantage)
     actor_loss -= 1e-3 * tf.reduce_mean(dist.entropy())
 
     # training
-    loss = actor_loss + critic_loss * 0.5 + tf.losses.get_regularization_loss()
+    loss = actor_loss + tf.losses.get_regularization_loss()
 
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
@@ -119,7 +128,7 @@ def main():
                 else:
                     s = s_prime
 
-            batch = utils.discounted_return(history, args.gamma)
+            batch = utils.build_batch(history, args.gamma)
 
             _, _, step = sess.run(
                 [train_step, update_metrics, global_step],

@@ -1,4 +1,4 @@
-import argparse
+import utils
 import numpy as np
 import gym
 import os
@@ -13,15 +13,8 @@ from network import PolicyCategorical
 # TODO: test build batch
 
 
-def build_batch(history, gamma):
-    state, action, reward = zip(*history)
-    ret = [sum(gamma**j * r for j, r in enumerate(reward[i:])) for i in range(len(reward))]
-
-    return state, action, ret
-
-
 def build_parser():
-    parser = argparse.ArgumentParser()
+    parser = utils.ArgumentParser()
     parser.add_argument('--history-size', type=int, default=10000)
     parser.add_argument('--learning-rate', type=float, default=1e-3)
     parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-mc')
@@ -35,6 +28,7 @@ def build_parser():
 
 def main():
     args = build_parser().parse_args()
+    utils.fix_seed(args.seed)
     experiment_path = os.path.join(args.experiment_path, args.env)
     env = gym.make(args.env)
     state_size = np.squeeze(env.observation_space.shape)
@@ -105,7 +99,7 @@ def main():
                 else:
                     s = s_prime
 
-            batch = build_batch(history, args.gamma)
+            batch = utils.discounted_return(history, args.gamma)
 
             _, _, step = sess.run(
                 [train_step, update_metrics, global_step],

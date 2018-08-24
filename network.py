@@ -14,22 +14,18 @@ class Network(tf.layers.Layer):
             kernel_initializer=kernel_initializer,
             kernel_regularizer=kernel_regularizer,
             trainable=trainable)
-        # self.norm_1 = tf.layers.BatchNormalization(trainable=trainable)
 
         self.dense_2 = tf.layers.Dense(
             32,
             kernel_initializer=kernel_initializer,
             kernel_regularizer=kernel_regularizer,
             trainable=trainable)
-        # self.norm_2 = tf.layers.BatchNormalization(trainable=trainable)
 
     def call(self, input, training):
         input = self.dense_1(input)
-        # input = self.norm_1(input, training=training)  # FIXME:
         input = tf.nn.elu(input)
 
         input = self.dense_2(input)
-        # input = self.norm_2(input, training=training)  # FIXME:
         input = tf.nn.elu(input)
 
         return input

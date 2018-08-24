@@ -5,22 +5,19 @@ import os
 import tensorflow as tf
 import itertools
 from tqdm import tqdm
-from network import ValueFunction, PolicyCategorical, PolicyNormal
+from network import PolicyCategorical
 
 
-# TODO: refactor action space differences
 # TODO: do not mask not taken actions?
 # TODO: compute advantage out of graph
-# TODO: test build batch
 
 
 def build_parser():
     parser = utils.ArgumentParser()
     parser.add_argument('--history-size', type=int, default=10000)
     parser.add_argument('--learning-rate', type=float, default=1e-3)
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/ac-mc')
+    parser.add_argument('--experiment-path', type=str, default='./tf_log/ppo-pg-mc')
     parser.add_argument('--env', type=str, required=True)
-    parser.add_argument('--a-space', type=str, choices=['cat', 'con'], required=True)
     parser.add_argument('--episodes', type=int, default=1000)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--monitor', action='store_true')
@@ -44,37 +41,29 @@ def main():
 
     # input
     state = tf.placeholder(tf.float32, [None, state_size], name='state')
-    if args.a_space == 'cat':
-        action = tf.placeholder(tf.int32, [None], name='action')
-    elif args.a_space == 'con':
-        action = tf.placeholder(tf.float32, [None, *env.action_space.shape], name='action')
+    action = tf.placeholder(tf.int32, [None], name='action')
     ret = tf.placeholder(tf.float32, [None], name='return')
 
-    # critic
-    value_function = ValueFunction()
-    state_value = value_function(state, training=training)
-    td_target = tf.stop_gradient(ret)
-    td_error = td_target - state_value
-    critic_loss = tf.reduce_mean(tf.square(td_error))
-
     # actor
-    if args.a_space == 'cat':
-        policy = PolicyCategorical(env.action_space.n)
-    elif args.a_space == 'con':
-        policy = PolicyNormal(np.squeeze(env.action_space.shape))
+    policy = PolicyCategorical(env.action_space.n, name='policy')
     dist = policy(state, training=training)
+    policy_old = PolicyCategorical(env.action_space.n, trainable=False, name='policy_old')
+    dist_old = policy_old(state, training=False)
     action_sample = dist.sample()
-    if args.a_space == 'con':
-        action_sample = tf.clip_by_value(action_sample, env.action_space.low, env.action_space.high)
-    advantage = tf.stop_gradient(td_error)
-    if args.a_space == 'cat':
-        actor_loss = -tf.reduce_mean(dist.log_prob(action) * advantage)
-    elif args.a_space == 'con':
-        actor_loss = -tf.reduce_mean(dist.log_prob(action) * tf.expand_dims(advantage, -1))
+    advantage = ret
+
+    ratio = tf.exp(dist.log_prob(action) - dist_old.log_prob(action))  # pnew / pold
+    surr1 = ratio * advantage  # surrogate from conservative policy iteration
+    surr2 = tf.clip_by_value(ratio, 1.0 - 0.2, 1.0 + 0.2) * advantage  #
+    actor_loss = -tf.reduce_mean(tf.minimum(surr1, surr2))  # PPO's pessimistic surrogate (L^CLIP)
     actor_loss -= 1e-3 * tf.reduce_mean(dist.entropy())
 
+    update_policy_old = tf.group(*[
+        tf.assign(old_var, var)
+        for var, old_var in zip(tf.global_variables('policy/'), tf.global_variables('policy_old/'))])
+
     # training
-    loss = actor_loss + critic_loss * 0.5 + tf.losses.get_regularization_loss()
+    loss = actor_loss + tf.losses.get_regularization_loss()
 
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
@@ -131,6 +120,8 @@ def main():
                     ep_reward: ep_r,
                     training: True,
                 })
+
+            sess.run(update_policy_old)
 
             if ep % 100 == 0:
                 summ, metr = sess.run([summary, metrics])
