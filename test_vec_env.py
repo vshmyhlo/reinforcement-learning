@@ -29,7 +29,7 @@ class SampleEnv(object):
 
 
 def test_vec_env():
-    env = VecEnv(lambda _: SampleEnv(), size=3)
+    env = VecEnv([lambda: SampleEnv() for _ in range(3)])
 
     s = env.reset()
 
@@ -52,3 +52,5 @@ def test_vec_env():
     assert np.array_equal(s_prime, [[0], [2], [2]])
     assert np.array_equal(r, [0, 10, 20])
     assert np.array_equal(d, [False, True, True])
+
+    env.close()

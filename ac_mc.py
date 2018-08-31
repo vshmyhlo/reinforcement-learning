@@ -5,13 +5,19 @@ import os
 import tensorflow as tf
 import itertools
 from tqdm import tqdm
-from network import ValueFunction, PolicyCategorical, PolicyNormal
+from network import ValueFunction, PolicyCategorical
 
 
 # TODO: refactor action space differences
 # TODO: do not mask not taken actions?
 # TODO: compute advantage out of graph
 # TODO: test build batch
+
+def build_batch(history, gamma):
+    s, a, r = zip(*history)
+    r = utils.discounted_return(np.array(r), gamma)
+
+    return s, a, r
 
 
 def build_parser():
@@ -20,8 +26,7 @@ def build_parser():
     parser.add_argument('--learning-rate', type=float, default=1e-3)
     parser.add_argument('--experiment-path', type=str, default='./tf_log/ac-mc')
     parser.add_argument('--env', type=str, required=True)
-    parser.add_argument('--a-space', type=str, choices=['cat', 'con'], required=True)
-    parser.add_argument('--episodes', type=int, default=1000)
+    parser.add_argument('--episodes', type=int, default=10000)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--monitor', action='store_true')
 
@@ -40,14 +45,11 @@ def main():
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
 
     global_step = tf.train.get_or_create_global_step()
-    training = tf.placeholder(tf.bool, [])
+    training = tf.placeholder(tf.bool, [], name='training')
 
     # input
     state = tf.placeholder(tf.float32, [None, state_size], name='state')
-    if args.a_space == 'cat':
-        action = tf.placeholder(tf.int32, [None], name='action')
-    elif args.a_space == 'con':
-        action = tf.placeholder(tf.float32, [None, *env.action_space.shape], name='action')
+    action = tf.placeholder(tf.int32, [None], name='action')
     ret = tf.placeholder(tf.float32, [None], name='return')
 
     # critic
@@ -58,19 +60,11 @@ def main():
     critic_loss = tf.reduce_mean(tf.square(td_error))
 
     # actor
-    if args.a_space == 'cat':
-        policy = PolicyCategorical(env.action_space.n)
-    elif args.a_space == 'con':
-        policy = PolicyNormal(np.squeeze(env.action_space.shape))
+    policy = PolicyCategorical(env.action_space.n)
     dist = policy(state, training=training)
     action_sample = dist.sample()
-    if args.a_space == 'con':
-        action_sample = tf.clip_by_value(action_sample, env.action_space.low, env.action_space.high)
     advantage = tf.stop_gradient(td_error)
-    if args.a_space == 'cat':
-        actor_loss = -tf.reduce_mean(dist.log_prob(action) * advantage)
-    elif args.a_space == 'con':
-        actor_loss = -tf.reduce_mean(dist.log_prob(action) * tf.expand_dims(advantage, -1))
+    actor_loss = -tf.reduce_mean(dist.log_prob(action) * advantage)
     actor_loss -= 1e-3 * tf.reduce_mean(dist.entropy())
 
     # training
@@ -119,7 +113,7 @@ def main():
                 else:
                     s = s_prime
 
-            batch = utils.discounted_return(history, args.gamma)
+            batch = build_batch(history, args.gamma)
 
             _, _, step = sess.run(
                 [train_step, update_metrics, global_step],

@@ -8,9 +8,17 @@ from tqdm import tqdm
 from network import PolicyCategorical
 
 
+# TODO: monitored session
 # TODO: do not mask not taken actions?
 # TODO: compute advantage out of graph
 # TODO: test build batch
+
+
+def build_batch(history, gamma):
+    s, a, r = zip(*history)
+    r = utils.discounted_return(np.array(r), gamma)
+
+    return s, a, r
 
 
 def build_parser():
@@ -19,7 +27,7 @@ def build_parser():
     parser.add_argument('--learning-rate', type=float, default=1e-3)
     parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-mc')
     parser.add_argument('--env', type=str, required=True)
-    parser.add_argument('--episodes', type=int, default=1000)
+    parser.add_argument('--episodes', type=int, default=10000)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--monitor', action='store_true')
 
@@ -38,7 +46,7 @@ def main():
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
 
     global_step = tf.train.get_or_create_global_step()
-    training = tf.placeholder(tf.bool, [])
+    training = tf.placeholder(tf.bool, [], name='training')
 
     # input
     state = tf.placeholder(tf.float32, [None, state_size], name='state')
@@ -99,7 +107,7 @@ def main():
                 else:
                     s = s_prime
 
-            batch = utils.discounted_return(history, args.gamma)
+            batch = build_batch(history, args.gamma)
 
             _, _, step = sess.run(
                 [train_step, update_metrics, global_step],
