@@ -87,7 +87,6 @@ def main():
         step, summ, metr = sess.run([global_step, summary, metrics])
         writer.add_summary(summ, step)
         writer.flush()
-        saver.save(sess, os.path.join(experiment_path, 'model.ckpt'))
 
     args = build_parser().parse_args()
     utils.fix_seed(args.seed)
@@ -141,13 +140,9 @@ def main():
     ])
 
     locals_init = tf.local_variables_initializer()
-    saver = tf.train.Saver()
-    with tf.Session() as sess, tf.summary.FileWriter(experiment_path) as writer:
-        if tf.train.latest_checkpoint(experiment_path):
-            saver.restore(sess, tf.train.latest_checkpoint(experiment_path))
-        else:
-            sess.run(tf.global_variables_initializer())
-
+    hooks = [tf.train.CheckpointSaverHook(checkpoint_dir=args.experiment_path, save_steps=100)]
+    with tf.train.SingularMonitoredSession(
+            checkpoint_dir=args.experiment_path, hooks=hooks) as sess, tf.summary.FileWriter(experiment_path) as writer:
         s = env.reset()
         for _ in range(args.steps // 100):
             sess.run(locals_init)
