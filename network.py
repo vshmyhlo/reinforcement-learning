@@ -106,8 +106,7 @@ class PolicyNormal(tf.layers.Layer):
         input = self.dense(input)
 
         mu, sigma = tf.split(input, 2, -1)
-        sigma = tf.nn.softplus(sigma) + 1e-5  # TODO: softplus?
-
+        sigma = tf.nn.softplus(sigma) + 1e-5
         dist = tf.distributions.Normal(mu, sigma)
 
         return dist

@@ -51,7 +51,7 @@ class VecEnv(object):
         self._conns[0].send((Command.GET_SPACES,))
         observation_space, action_space = self._conns[0].recv()
 
-        self.observation_space = VecObservationSpace(size=len(env_fns), observation_space=observation_space)
+        self.observation_space = VecObservationSpace(observation_space=observation_space)
         self.action_space = VecActionSpace(size=len(env_fns), action_space=action_space)
 
     def reset(self, dones=None):
@@ -63,7 +63,7 @@ class VecEnv(object):
         else:
             assert len(dones) == len(self._conns)
 
-            state = np.zeros(self.observation_space.shape)
+            state = np.zeros([len(self._conns), *self.observation_space.shape])
 
             for i, (conn, done) in enumerate(zip(self._conns, dones)):
                 if done:
@@ -101,16 +101,19 @@ class VecActionSpace(object):
     def __init__(self, size, action_space):
         self._size = size
         self._action_space = action_space
+        self.shape = action_space.shape
 
-        self.n = action_space.n
+        if hasattr(action_space, 'low') and hasattr(action_space, 'high'):
+            self.low = action_space.low
+            self.high = action_space.high
 
     def sample(self):
         return np.array([self._action_space.sample() for _ in range(self._size)])
 
 
 class VecObservationSpace(object):
-    def __init__(self, size, observation_space):
-        self.shape = [size, *observation_space.shape]
+    def __init__(self, observation_space):
+        self.shape = observation_space.shape
 
 
 def main():

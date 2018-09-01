@@ -35,16 +35,16 @@ def test_discounted_reward():
 
 
 def test_batch_a3c_return():
-    rewards = np.array([[5, 4, 3] * 2])
+    rewards = np.array([[5, 4, 3] * 2 + [2]])
     value_prime = np.array([100])
-    dones = np.array([[False, False, True] * 2])
+    dones = np.array([[False, False, True] * 2 + [False]])
 
     actual = utils.batch_a3c_return(rewards, value_prime, dones, gamma=0.9)
     expected = [[
                     5 + 0.9 * 4 + 0.9**2 * 3,
                     4 + 0.9 * 3,
                     3
-                ] * 2]
+                ] * 2 + [92]]
 
     assert np.allclose(actual, expected)
 
