@@ -5,7 +5,7 @@ import os
 import tensorflow as tf
 import itertools
 from tqdm import tqdm
-from network import ValueFunction, PolicyNormal
+from network import ValueFunction, PolicyCategorical
 from vec_env import VecEnv
 
 
@@ -30,10 +30,10 @@ def build_parser():
     parser = utils.ArgumentParser()
     parser.add_argument('--horizon', type=int, default=256 // os.cpu_count())
     parser.add_argument('--learning-rate', type=float, default=1e-3)
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/a3c-con')
+    parser.add_argument('--experiment-path', type=str, default='./tf_log/a2c')
     parser.add_argument('--env', type=str, required=True)
     parser.add_argument('--steps', type=int, default=10000)
-    parser.add_argument('--entropy-weight', type=float, default=1e-4)
+    parser.add_argument('--entropy-weight', type=float, default=1e-2)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--monitor', action='store_true')
 
@@ -87,6 +87,7 @@ def main():
         step, summ, metr = sess.run([global_step, summary, metrics])
         writer.add_summary(summ, step)
         writer.flush()
+        saver.save(sess, os.path.join(experiment_path, 'model.ckpt'))
 
     args = build_parser().parse_args()
     utils.fix_seed(args.seed)
@@ -100,8 +101,8 @@ def main():
     training = tf.placeholder(tf.bool, [], name='training')
 
     # input
-    state = tf.placeholder(tf.float32, [None, *env.observation_space.shape], name='state')
-    action = tf.placeholder(tf.float32, [None, *env.action_space.shape], name='action')
+    state = tf.placeholder(tf.float32, [None, *env.observation_space.shape[1:]], name='state')
+    action = tf.placeholder(tf.int32, [None], name='action')
     ret = tf.placeholder(tf.float32, [None], name='return')
 
     # critic
@@ -111,12 +112,11 @@ def main():
     critic_loss = tf.reduce_mean(tf.square(td_error))
 
     # actor
-    policy = PolicyNormal(np.squeeze(env.action_space.shape))
+    policy = PolicyCategorical(env.action_space.n)
     dist = policy(state, training=training)
     action_sample = dist.sample()
-    action_sample = tf.clip_by_value(action_sample, env.action_space.low, env.action_space.high)
     advantage = tf.stop_gradient(td_error)
-    actor_loss = -tf.reduce_mean(dist.log_prob(action) * tf.expand_dims(advantage, -1))
+    actor_loss = -tf.reduce_mean(dist.log_prob(action) * advantage)
     actor_loss -= args.entropy_weight * tf.reduce_mean(dist.entropy())
 
     # training
@@ -140,9 +140,13 @@ def main():
     ])
 
     locals_init = tf.local_variables_initializer()
-    hooks = [tf.train.CheckpointSaverHook(checkpoint_dir=args.experiment_path, save_steps=100)]
-    with tf.train.SingularMonitoredSession(
-            checkpoint_dir=args.experiment_path, hooks=hooks) as sess, tf.summary.FileWriter(experiment_path) as writer:
+    saver = tf.train.Saver()
+    with tf.Session() as sess, tf.summary.FileWriter(experiment_path) as writer:
+        if tf.train.latest_checkpoint(experiment_path):
+            saver.restore(sess, tf.train.latest_checkpoint(experiment_path))
+        else:
+            sess.run(tf.global_variables_initializer())
+
         s = env.reset()
         for _ in range(args.steps // 100):
             sess.run(locals_init)
