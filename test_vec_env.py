@@ -4,10 +4,10 @@ from vec_env import VecEnv
 
 class SampleEnv(object):
     class ObservationSpace(object):
-        shape = [1]
+        shape = (1,)
 
     class ActionSpace(object):
-        n = 1
+        shape = (1,)
 
         def sample(self):
             return [-1]
@@ -21,7 +21,7 @@ class SampleEnv(object):
         return [self._i]
 
     def step(self, a):
-        assert a.shape == (self.action_space.n,)
+        assert a.shape == self.action_space.shape
 
         self._i += a[0]
 

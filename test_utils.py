@@ -1,5 +1,39 @@
 import numpy as np
+import tensorflow as tf
 import utils
+import impala
+
+
+class UtilsTest(tf.test.TestCase):
+    def test_from_importance_weights(self):
+        log_ratios = np.expand_dims(np.log([0.5, 0.5, 0.5, 2., 2., 2.]), 1)
+        discounts = np.expand_dims([0.9, 0.9, 0., 0.9, 0.9, 0.], 1)
+        rewards = np.expand_dims([5., 5., 5., 5., 5., 5.], 1)
+        values = np.expand_dims([10., 10., 10., 10., 10., 10.], 1)
+        value_prime = [100.]
+
+        actual = impala.from_importance_weights(log_ratios, discounts, rewards, values, value_prime)
+        actual = self.evaluate(actual)
+
+        ratios = np.exp(log_ratios)
+        values_prime = np.concatenate([values[1:], np.expand_dims(value_prime, 1)], 0)
+
+        vs_minus_values = np.zeros(values.shape)
+        v_minus_value = np.zeros(values.shape[1:])
+        for t in reversed(range(vs_minus_values.shape[0])):
+            delta = np.minimum(1., ratios[t]) * (rewards[t] + discounts[t] * values_prime[t] - values[t])
+            # v_minus_value += discounts[t] * np.minimum(1., ratios[t]) * delta # TODO: ???
+            v_minus_value = delta + discounts[t] * np.minimum(1., ratios[t]) * v_minus_value
+            vs_minus_values[t] = v_minus_value
+
+        vs = values + vs_minus_values
+        vs_prime = np.concatenate([vs[1:], np.expand_dims(value_prime, 0)], 0)
+        pg_advantages = np.minimum(1., ratios) * (rewards + discounts * vs_prime - values)
+
+        expected = vs, pg_advantages
+
+        assert np.allclose(actual[0], expected[0])
+        assert np.allclose(actual[1], expected[1])
 
 
 # def test_discounted_return():

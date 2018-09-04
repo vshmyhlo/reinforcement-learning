@@ -5,6 +5,7 @@ import tensorflow as tf
 
 
 # TODO: pass value_prime
+# TODO: use tf.scan
 
 
 def fix_seed(seed):

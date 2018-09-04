@@ -22,7 +22,6 @@ def build_batch(history, gamma):
 
 def build_parser():
     parser = utils.ArgumentParser()
-    parser.add_argument('--history-size', type=int, default=10000)
     parser.add_argument('--learning-rate', type=float, default=1e-3)
     parser.add_argument('--experiment-path', type=str, default='./tf_log/ac-mc')
     parser.add_argument('--env', type=str, required=True)
