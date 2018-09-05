@@ -137,7 +137,6 @@ def main():
         tf.summary.scalar('ep_length', metrics['ep_length']),
         tf.summary.scalar('ep_reward', metrics['ep_reward'])
     ])
-
     locals_init = tf.local_variables_initializer()
 
     hooks = [

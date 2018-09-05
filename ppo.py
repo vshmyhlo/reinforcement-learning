@@ -29,6 +29,7 @@ def build_parser():
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--gae', type=float, default=0.95)
     parser.add_argument('--horizon', type=int, default=128)
+    parser.add_argument('--entropy-weight', type=float, default=1e-2)
     parser.add_argument('--monitor', action='store_true')
 
     return parser
@@ -123,7 +124,7 @@ def main():
     surr1 = ratio * advantage  # surrogate from conservative policy iteration
     surr2 = tf.clip_by_value(ratio, 1.0 - 0.2, 1.0 + 0.2) * advantage  #
     actor_loss = -tf.reduce_mean(tf.minimum(surr1, surr2))  # PPO's pessimistic surrogate (L^CLIP)
-    actor_loss -= 1e-3 * tf.reduce_mean(dist.entropy())
+    actor_loss -= args.entropy_weight * tf.reduce_mean(dist.entropy())
 
     update_policy_old = tf.group(*[
         tf.assign(old_var, var)
@@ -148,20 +149,20 @@ def main():
         tf.summary.scalar('ep_length', metrics['ep_length']),
         tf.summary.scalar('ep_reward', metrics['ep_reward'])
     ])
-
     locals_init = tf.local_variables_initializer()
-    saver = tf.train.Saver()
-    with tf.Session() as sess, tf.summary.FileWriter(experiment_path) as writer:
-        if tf.train.latest_checkpoint(experiment_path):
-            saver.restore(sess, tf.train.latest_checkpoint(experiment_path))
-        else:
-            sess.run(tf.global_variables_initializer())
 
+    hooks = [
+        tf.train.CheckpointSaverHook(checkpoint_dir=experiment_path, save_steps=100)
+    ]
+    with tf.train.SingularMonitoredSession(checkpoint_dir=experiment_path, hooks=hooks) as sess, tf.summary.FileWriter(
+            experiment_path) as writer:
         s = env.reset()
         for _ in range(1000):
             sess.run(locals_init)
             s = train(s, num_steps=100)
             evaluate(num_episodes=10)
+
+    env.close()
 
 
 if __name__ == '__main__':
