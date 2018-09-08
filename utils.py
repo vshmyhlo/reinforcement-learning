@@ -20,20 +20,6 @@ def flatten_batch_horizon(array):
     return array.reshape((b * h, *shape))
 
 
-# TODO: rename
-def batch_a3c_return(rewards, value_prime, dones, gamma):
-    batch_size, horizon = rewards.shape
-    returns = np.zeros((batch_size, horizon))
-    ret = value_prime
-    masks = np.logical_not(dones)
-
-    for t in reversed(range(horizon)):
-        ret = rewards[:, t] + masks[:, t] * gamma * ret
-        returns[:, t] = ret
-
-    return returns
-
-
 def discounted_reward(rewards, gamma):
     result = np.zeros(rewards.shape[:1])
 

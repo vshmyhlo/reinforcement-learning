@@ -15,15 +15,10 @@ from vec_env import VecEnv
 # TODO: compute advantage out of graph
 # TODO: test build batch
 
-def build_batch(history, value_prime, gamma):
-    state, action, reward, done = [np.array(x).swapaxes(0, 1) for x in zip(*history)]
-    ret = utils.batch_a3c_return(reward, value_prime, done, gamma)
+def build_batch(history):
+    columns = zip(*history)
 
-    state = utils.flatten_batch_horizon(state)
-    action = utils.flatten_batch_horizon(action)
-    ret = utils.flatten_batch_horizon(ret)
-
-    return state, action, ret
+    return [np.array(col).swapaxes(0, 1) for col in columns]
 
 
 def build_parser():
@@ -46,21 +41,22 @@ def main():
             history = []
 
             for _ in range(args.horizon):
-                a = sess.run(action_sample, {state: s})
+                a = sess.run(action_sample, {states: np.expand_dims(s, 1)}).squeeze(1)
                 s_prime, r, d, _ = env.step(a)
                 history.append((s, a, r, d))
                 s = np.where(np.expand_dims(d, -1), env.reset(d), s_prime)
 
             batch = {}
-            v_prime = sess.run(state_value, {state: s})
-            batch['state'], batch['action'], batch['return'] = build_batch(history, v_prime, args.gamma)
+            batch['states'], batch['actions'], batch['rewards'], batch['dones'] = build_batch(history)
 
             sess.run(
                 [train_step, update_metrics['loss']],
                 {
-                    state: batch['state'],
-                    action: batch['action'],
-                    ret: batch['return']
+                    states: batch['states'],
+                    actions: batch['actions'],
+                    rewards: batch['rewards'],
+                    state_prime: s,
+                    dones: batch['dones']
                 })
 
         return s
@@ -73,7 +69,7 @@ def main():
             ep_r = 0
 
             for t in itertools.count():
-                a = sess.run(action_sample, {state: np.expand_dims(s, 0)}).squeeze(0)
+                a = sess.run(action_sample, {states: np.reshape(s, (1, 1, -1))}).squeeze(0).squeeze(0)
                 s_prime, r, d, _ = env.step(a)
                 ep_r += r
 
@@ -100,22 +96,28 @@ def main():
     training = tf.placeholder(tf.bool, [], name='training')
 
     # input
-    state = tf.placeholder(tf.float32, [None, np.squeeze(env.observation_space.shape)], name='state')
-    action = tf.placeholder(tf.int32, [None], name='action')
-    ret = tf.placeholder(tf.float32, [None], name='return')
+    b, t = None, None
+    states = tf.placeholder(tf.float32, [b, t, np.squeeze(env.observation_space.shape)], name='states')
+    actions = tf.placeholder(tf.int32, [b, t], name='actions')
+    rewards = tf.placeholder(tf.float32, [b, t], name='rewards')
+    state_prime = tf.placeholder(tf.float32, [b, np.squeeze(env.observation_space.shape)], name='state_prime')
+    dones = tf.placeholder(tf.bool, [b, t], name='dones')
 
     # critic
     value_function = ValueFunction()
-    state_value = value_function(state, training=training)
-    td_error = ret - state_value
-    critic_loss = tf.reduce_mean(tf.square(td_error))
+    values = value_function(states, training=training)
+    value_prime = value_function(state_prime, training=training)
+    returns = utils.batch_n_step_return(rewards, value_prime, dones, gamma=args.gamma)
+    returns = tf.stop_gradient(returns)
+    error = returns - values
+    critic_loss = tf.reduce_mean(tf.square(error))
 
     # actor
     policy = PolicyCategorical(np.squeeze(env.action_space.shape))
-    dist = policy(state, training=training)
+    dist = policy(states, training=training)
     action_sample = dist.sample()
-    advantage = tf.stop_gradient(td_error)
-    actor_loss = -tf.reduce_mean(dist.log_prob(action) * advantage)
+    advantage = tf.stop_gradient(error)
+    actor_loss = -tf.reduce_mean(dist.log_prob(actions) * advantage)
     actor_loss -= args.entropy_weight * tf.reduce_mean(dist.entropy())
 
     # training

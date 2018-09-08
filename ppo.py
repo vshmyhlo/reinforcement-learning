@@ -16,7 +16,7 @@ from network import PolicyCategorical, ValueFunction
 # TODO: compute advantage out of graph
 
 
-def history_to_batch(history):
+def build_batch(history):
     columns = zip(*history)
 
     return [np.array(col).swapaxes(0, 1) for col in columns]
@@ -49,7 +49,7 @@ def main():
                 s = np.where(np.expand_dims(d, -1), env.reset(d), s_prime)
 
             batch = {}
-            batch['states'], batch['actions'], batch['rewards'], batch['dones'] = history_to_batch(
+            batch['states'], batch['actions'], batch['rewards'], batch['dones'] = build_batch(
                 history)
 
             sess.run(
@@ -58,8 +58,8 @@ def main():
                     states: batch['states'],
                     actions: batch['actions'],
                     rewards: batch['rewards'],
-                    dones: batch['dones'],
-                    state_prime: s
+                    state_prime: s,
+                    dones: batch['dones']
                 })
 
         return s
@@ -111,7 +111,8 @@ def main():
     values = value_function(states, training=training)
     value_prime = value_function(state_prime, training=training)
     advantages = utils.batch_generalized_advantage_estimation(rewards, values, value_prime, dones, args.gamma, args.lam)
-    value_targets = advantages + values
+    advantages = tf.stop_gradient(advantages)
+    value_targets = tf.stop_gradient(advantages + values)
     critic_loss = tf.reduce_mean(tf.square(value_targets - values))
 
     # actor
@@ -127,11 +128,11 @@ def main():
     actor_loss = -tf.reduce_mean(tf.minimum(surr1, surr2))  # PPO's pessimistic surrogate (L^CLIP)
     actor_loss -= args.entropy_weight * tf.reduce_mean(dist.entropy())
 
+    # training
     update_policy_old = tf.group(*[
         tf.assign(old_var, var)
         for var, old_var in zip(tf.global_variables('policy/'), tf.global_variables('policy_old/'))])
 
-    # training
     loss = actor_loss + critic_loss * 0.5 + tf.losses.get_regularization_loss()
 
     with tf.control_dependencies([loss]):
