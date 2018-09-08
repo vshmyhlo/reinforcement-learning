@@ -9,6 +9,8 @@ from tqdm import tqdm
 from network import PolicyCategorical, ValueFunction
 
 
+# TODO: finished episodes in meta
+# TODO: normalization (advantage, state, value_target)
 # TODO: multiepoch
 # TODO: do not mask not taken actions?
 # TODO: compute advantage out of graph
@@ -27,7 +29,7 @@ def build_parser():
     parser.add_argument('--experiment-path', type=str, default='./tf_log/ppo')
     parser.add_argument('--env', type=str, required=True)
     parser.add_argument('--gamma', type=float, default=0.99)
-    parser.add_argument('--gae', type=float, default=0.95)
+    parser.add_argument('--lam', type=float, default=0.95)
     parser.add_argument('--horizon', type=int, default=128)
     parser.add_argument('--entropy-weight', type=float, default=1e-2)
     parser.add_argument('--monitor', action='store_true')
@@ -41,29 +43,24 @@ def main():
             history = []
 
             for _ in range(args.horizon):
-                a, v = sess.run([action_sample, state_value], {state: s})
+                a = sess.run(action_sample, {states: np.expand_dims(s, 1)}).squeeze(1)
                 s_prime, r, d, _ = env.step(a)
-                history.append((s, a, r, v, d))
+                history.append((s, a, r, d))
                 s = np.where(np.expand_dims(d, -1), env.reset(d), s_prime)
 
             batch = {}
-            batch['state'], batch['action'], batch['reward'], batch['value'], batch['done'] = history_to_batch(history)
-            batch['value_prime'] = sess.run(state_value, {state: s_prime})
-            batch['advantage'] = utils.generalized_advantage_estimation(
-                batch['reward'], batch['value'], batch['value_prime'], batch['done'], gamma=args.gamma, lam=args.gae)
-            batch['advantage'] = (batch['advantage'] - batch['advantage'].mean()) / (batch['advantage'].std() + 1e-5)
-            batch['return'] = batch['advantage'] + batch['value']
+            batch['states'], batch['actions'], batch['rewards'], batch['dones'] = history_to_batch(
+                history)
 
             sess.run(
                 [train_step, update_metrics['loss']],
                 {
-                    state: utils.flatten_batch_horizon(batch['state']),
-                    action: utils.flatten_batch_horizon(batch['action']),
-                    ret: utils.flatten_batch_horizon(batch['return']),
-                    advantage: utils.flatten_batch_horizon(batch['advantage'])
+                    states: batch['states'],
+                    actions: batch['actions'],
+                    rewards: batch['rewards'],
+                    dones: batch['dones'],
+                    state_prime: s
                 })
-
-            sess.run(update_policy_old)
 
         return s
 
@@ -75,7 +72,7 @@ def main():
             ep_r = 0
 
             for t in itertools.count():
-                a = sess.run(action_sample, {state: np.expand_dims(s, 0)}).squeeze(0)
+                a = sess.run(action_sample, {states: np.reshape(s, (1, 1, -1))}).squeeze(0).squeeze(0)
                 s_prime, r, d, _ = env.step(a)
                 ep_r += r
 
@@ -89,7 +86,6 @@ def main():
         step, summ, metr = sess.run([global_step, summary, metrics])
         writer.add_summary(summ, step)
         writer.flush()
-        saver.save(sess, os.path.join(experiment_path, 'model.ckpt'))
 
     args = build_parser().parse_args()
     utils.fix_seed(args.seed)
@@ -103,26 +99,31 @@ def main():
     training = tf.placeholder(tf.bool, [], name='training')
 
     # input
-    state = tf.placeholder(tf.float32, [None, *env.observation_space.shape[1:]], name='state')
-    action = tf.placeholder(tf.int32, [None], name='action')
-    ret = tf.placeholder(tf.float32, [None], name='return')
-    advantage = tf.placeholder(tf.float32, [None], name='advantage')
+    b, t = None, None
+    states = tf.placeholder(tf.float32, [b, t, np.squeeze(env.observation_space.shape)], name='states')
+    actions = tf.placeholder(tf.int32, [b, t], name='actions')
+    rewards = tf.placeholder(tf.float32, [b, t], name='rewards')
+    state_prime = tf.placeholder(tf.float32, [b, np.squeeze(env.observation_space.shape)], name='state_prime')
+    dones = tf.placeholder(tf.bool, [b, t], name='dones')
 
     # critic
     value_function = ValueFunction()
-    state_value = value_function(state, training=training)
-    critic_loss = tf.reduce_mean(tf.square(ret - state_value))
+    values = value_function(states, training=training)
+    value_prime = value_function(state_prime, training=training)
+    advantages = utils.batch_generalized_advantage_estimation(rewards, values, value_prime, dones, args.gamma, args.lam)
+    value_targets = advantages + values
+    critic_loss = tf.reduce_mean(tf.square(value_targets - values))
 
     # actor
-    policy = PolicyCategorical(env.action_space.n, name='policy')
-    dist = policy(state, training=training)
-    policy_old = PolicyCategorical(env.action_space.n, trainable=False, name='policy_old')
-    dist_old = policy_old(state, training=False)
+    policy = PolicyCategorical(np.squeeze(env.action_space.shape), name='policy')
+    dist = policy(states, training=training)
+    policy_old = PolicyCategorical(np.squeeze(env.action_space.shape), trainable=False, name='policy_old')
+    dist_old = policy_old(states, training=False)
     action_sample = dist.sample()
 
-    ratio = tf.exp(dist.log_prob(action) - dist_old.log_prob(action))  # pnew / pold
-    surr1 = ratio * advantage  # surrogate from conservative policy iteration
-    surr2 = tf.clip_by_value(ratio, 1.0 - 0.2, 1.0 + 0.2) * advantage  #
+    ratio = tf.exp(dist.log_prob(actions) - dist_old.log_prob(actions))  # pnew / pold
+    surr1 = ratio * advantages  # surrogate from conservative policy iteration
+    surr2 = tf.clip_by_value(ratio, 1.0 - 0.2, 1.0 + 0.2) * advantages  #
     actor_loss = -tf.reduce_mean(tf.minimum(surr1, surr2))  # PPO's pessimistic surrogate (L^CLIP)
     actor_loss -= args.entropy_weight * tf.reduce_mean(dist.entropy())
 
@@ -133,9 +134,11 @@ def main():
     # training
     loss = actor_loss + critic_loss * 0.5 + tf.losses.get_regularization_loss()
 
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-    with tf.control_dependencies(update_ops):
-        train_step = tf.train.AdamOptimizer(args.learning_rate).minimize(loss, global_step=global_step)
+    with tf.control_dependencies([loss]):
+        with tf.control_dependencies([update_policy_old]):
+            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+            with tf.control_dependencies(update_ops):
+                train_step = tf.train.AdamOptimizer(args.learning_rate).minimize(loss, global_step=global_step)
 
     # summary
     ep_length = tf.placeholder(tf.float32, [])

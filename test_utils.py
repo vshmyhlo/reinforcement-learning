@@ -5,6 +5,29 @@ import impala
 
 
 class UtilsTest(tf.test.TestCase):
+    def test_batch_generalized_advantage_estimation(self):
+        rewards = [[1., 1., 1., 1., 1., 1.]]
+        values = [[3., 4., 5., 3., 4., 5.]]
+        value_prime = [6.]
+        dones = [[False, False, True, False, False, False]]
+
+        actual = utils.batch_generalized_advantage_estimation(rewards, values, value_prime, dones, gamma=0.9, lam=0.8)
+        actual = self.evaluate(actual)
+        expected = [[0.6064, -1.38, -4., 3.40576, 2.508, 1.4]]
+
+        assert np.allclose(actual, expected)
+
+    def test_batch_n_step_return(self):
+        rewards = [[1., 1., 1., 1., 1., 1.]]
+        value_prime = [10.]
+        dones = [[False, False, True, False, False, True]]
+
+        actual = utils.batch_n_step_return(rewards, value_prime, dones, gamma=0.9)
+        actual = self.evaluate(actual)
+        expected = [[2.71, 1.9, 1., 2.71, 1.9, 1.]]
+
+        assert np.allclose(actual, expected)
+
     def test_from_importance_weights(self):
         log_ratios = np.expand_dims(np.log([0.5, 0.5, 0.5, 2., 2., 2.]), 1)
         discounts = np.expand_dims([0.9, 0.9, 0., 0.9, 0.9, 0.], 1)
@@ -79,17 +102,5 @@ def test_batch_a3c_return():
                     4 + 0.9 * 3,
                     3
                 ] * 2 + [92]]
-
-    assert np.allclose(actual, expected)
-
-
-def test_generalized_advantage_estimation():
-    rewards = np.array([[-1, 0, 1] * 2])
-    values = np.array([[5, 4, 3] * 2])
-    value_prime = np.array([100])
-    dones = np.array([[False, False, True] * 2])
-
-    actual = utils.generalized_advantage_estimation(rewards, values, value_prime, dones, gamma=0.9, lam=0.8)
-    expected = [[-4.3728, -2.74, -2.] * 2]
 
     assert np.allclose(actual, expected)

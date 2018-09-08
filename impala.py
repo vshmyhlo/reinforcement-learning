@@ -12,7 +12,7 @@ import ray
 # TODO: join value function and policy everywhere
 # TODO: refactor net creation
 # TODO: use args.episodes
-
+# TODO: print ratio
 
 def from_importance_weights(
         log_ratios, discounts, rewards, values, value_prime, clip_ratio_threshold=1.0, clip_pg_ratio_threshold=1.0,
