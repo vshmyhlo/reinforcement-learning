@@ -12,9 +12,8 @@ from network import PolicyCategorical, ValueFunction
 # TODO: finished episodes in meta
 # TODO: normalization (advantage, state, value_target)
 # TODO: multiepoch
-# TODO: do not mask not taken actions?
-# TODO: compute advantage out of graph
-
+# TODO: cleanup args
+# TODO: fix monitor
 
 def build_batch(history):
     columns = zip(*history)
@@ -24,7 +23,6 @@ def build_batch(history):
 
 def build_parser():
     parser = utils.ArgumentParser()
-    parser.add_argument('--history-size', type=int, default=10000)
     parser.add_argument('--learning-rate', type=float, default=1e-3)
     parser.add_argument('--experiment-path', type=str, default='./tf_log/ppo')
     parser.add_argument('--env', type=str, required=True)
@@ -58,7 +56,7 @@ def main():
                     states: batch['states'],
                     actions: batch['actions'],
                     rewards: batch['rewards'],
-                    state_prime: s,
+                    state_prime: s_prime,
                     dones: batch['dones']
                 })
 
@@ -72,7 +70,7 @@ def main():
             ep_r = 0
 
             for t in itertools.count():
-                a = sess.run(action_sample, {states: np.reshape(s, (1, 1, -1))}).squeeze(0).squeeze(0)
+                a = sess.run(action_sample, {states: np.reshape(s, (1, 1, -1))}).squeeze((0, 1))
                 s_prime, r, d, _ = env.step(a)
                 ep_r += r
 
@@ -124,7 +122,7 @@ def main():
 
     ratio = tf.exp(dist.log_prob(actions) - dist_old.log_prob(actions))  # pnew / pold
     surr1 = ratio * advantages  # surrogate from conservative policy iteration
-    surr2 = tf.clip_by_value(ratio, 1.0 - 0.2, 1.0 + 0.2) * advantages  #
+    surr2 = tf.clip_by_value(ratio, 1.0 - 0.2, 1.0 + 0.2) * advantages
     actor_loss = -tf.reduce_mean(tf.minimum(surr1, surr2))  # PPO's pessimistic surrogate (L^CLIP)
     actor_loss -= args.entropy_weight * tf.reduce_mean(dist.entropy())
 

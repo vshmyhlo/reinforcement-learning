@@ -23,10 +23,10 @@ class Network(tf.layers.Layer):
 
     def call(self, input, training):
         input = self.dense_1(input)
-        input = tf.nn.elu(input)
+        input = tf.nn.relu(input)
 
         input = self.dense_2(input)
-        input = tf.nn.elu(input)
+        input = tf.nn.relu(input)
 
         return input
 

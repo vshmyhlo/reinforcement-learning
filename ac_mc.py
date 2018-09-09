@@ -8,16 +8,10 @@ from tqdm import tqdm
 from network import ValueFunction, PolicyCategorical
 
 
-# TODO: refactor action space differences
-# TODO: do not mask not taken actions?
-# TODO: compute advantage out of graph
-# TODO: test build batch
+def build_batch(history):
+    columns = zip(*history)
 
-def build_batch(history, gamma):
-    s, a, r = zip(*history)
-    r = utils.discounted_return(np.array(r), gamma)
-
-    return s, a, r
+    return [np.array(col).swapaxes(0, 1) for col in columns]
 
 
 def build_parser():
@@ -37,8 +31,6 @@ def main():
     utils.fix_seed(args.seed)
     experiment_path = os.path.join(args.experiment_path, args.env)
     env = gym.make(args.env)
-    state_size = np.squeeze(env.observation_space.shape)
-    assert state_size.shape == ()
 
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
@@ -47,23 +39,25 @@ def main():
     training = tf.placeholder(tf.bool, [], name='training')
 
     # input
-    state = tf.placeholder(tf.float32, [None, state_size], name='state')
-    action = tf.placeholder(tf.int32, [None], name='action')
-    ret = tf.placeholder(tf.float32, [None], name='return')
+    b, t = 1, None
+    states = tf.placeholder(tf.float32, [b, t, *env.observation_space.shape], name='states')
+    actions = tf.placeholder(tf.int32, [b, t], name='actions')
+    rewards = tf.placeholder(tf.float32, [b, t], name='rewards')
 
     # critic
     value_function = ValueFunction()
-    state_value = value_function(state, training=training)
-    td_target = tf.stop_gradient(ret)
-    td_error = td_target - state_value
-    critic_loss = tf.reduce_mean(tf.square(td_error))
+    values = value_function(states, training=training)
+    returns = utils.batch_return(rewards, gamma=args.gamma)
+    value_targets = tf.stop_gradient(returns)
+    errors = value_targets - values
+    critic_loss = tf.reduce_mean(tf.square(errors))
 
     # actor
     policy = PolicyCategorical(env.action_space.n)
-    dist = policy(state, training=training)
-    action_sample = dist.sample()
-    advantage = tf.stop_gradient(td_error)
-    actor_loss = -tf.reduce_mean(dist.log_prob(action) * advantage)
+    dist = policy(states, training=training)
+    action_samples = dist.sample()
+    advantages = tf.stop_gradient(errors)
+    actor_loss = -tf.reduce_mean(dist.log_prob(actions) * advantages)
     actor_loss -= 1e-3 * tf.reduce_mean(dist.entropy())
 
     # training
@@ -101,28 +95,28 @@ def main():
             ep_r = 0
 
             for t in itertools.count():
-                a = sess.run(action_sample, {state: s.reshape((1, state_size)), training: False}).squeeze(0)
+                a = sess.run(action_samples, {states: s.reshape((1, 1, -1))}).squeeze((0, 1))
                 s_prime, r, d, _ = env.step(a)
                 ep_r += r
 
-                history.append((s, a, r))
+                history.append(([s], [a], [r]))
 
                 if d:
                     break
                 else:
                     s = s_prime
 
-            batch = build_batch(history, args.gamma)
+            batch = {}
+            batch['states'], batch['actions'], batch['rewards'] = build_batch(history)
 
             _, _, step = sess.run(
                 [train_step, update_metrics, global_step],
                 {
-                    state: batch[0],
-                    action: batch[1],
-                    ret: batch[2],
+                    states: batch['states'],
+                    actions: batch['actions'],
+                    rewards: batch['rewards'],
                     ep_length: t,
-                    ep_reward: ep_r,
-                    training: True,
+                    ep_reward: ep_r
                 })
 
             if ep % 100 == 0:

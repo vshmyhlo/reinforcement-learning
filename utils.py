@@ -4,11 +4,6 @@ import numpy as np
 import tensorflow as tf
 
 
-# TOOO: remove last done in tests
-# TODO: pass value_prime
-# TODO: use tf.scan
-
-
 def fix_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -52,6 +47,14 @@ def batch_discounted_return(rewards, gamma):
     return returns
 
 
+def batch_return(rewards, gamma, name='batch_return'):
+    with tf.name_scope(name):
+        value_prime = tf.zeros(tf.shape(rewards)[:1])
+        dones = tf.fill(tf.shape(rewards), False)
+
+        return batch_n_step_return(rewards, value_prime, dones, gamma)
+
+
 def batch_n_step_return(rewards, value_prime, dones, gamma, name='batch_n_step_return'):
     def scan_fn(acc, elem):
         reward, mask = elem
@@ -64,7 +67,6 @@ def batch_n_step_return(rewards, value_prime, dones, gamma, name='batch_n_step_r
             [tf.float32, tf.float32, tf.bool, tf.float32])
 
         mask = tf.to_float(~dones)
-
         elems = (tf.transpose(rewards, (1, 0)), tf.transpose(mask, (1, 0)))
 
         returns = tf.scan(
@@ -114,7 +116,6 @@ def batch_generalized_advantage_estimation(
             [tf.float32, tf.float32, tf.float32, tf.bool, tf.float32, tf.float32])
 
         mask = tf.to_float(~dones)
-
         values_prime = tf.concat([values[:, 1:], tf.expand_dims(value_prime, 1)], 1)
         errors = rewards + mask * gamma * values_prime - values
 

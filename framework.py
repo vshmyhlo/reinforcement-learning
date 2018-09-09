@@ -7,21 +7,17 @@ import itertools
 from tqdm import tqdm
 from network import ValueFunction, PolicyCategorical
 from vec_env import VecEnv
+from iterators import HorizonIterator
 
 
 # TODO: seed env
-
-def build_batch(history):
-    columns = zip(*history)
-
-    return [np.array(col).swapaxes(0, 1) for col in columns]
 
 
 def build_parser():
     parser = utils.ArgumentParser()
     parser.add_argument('--horizon', type=int, default=128)
     parser.add_argument('--learning-rate', type=float, default=1e-3)
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/a2c')
+    parser.add_argument('--experiment-path', type=str, default='./tf_log/framework')
     parser.add_argument('--env', type=str, required=True)
     parser.add_argument('--steps', type=int, default=10000)
     parser.add_argument('--entropy-weight', type=float, default=1e-2)
@@ -33,25 +29,18 @@ def build_parser():
 
 def main():
     def train(s, num_steps):
-        for _ in tqdm(range(num_steps), desc='training'):
-            history = []
-
-            for _ in range(args.horizon):
-                a = sess.run(action_sample, {states: np.expand_dims(s, 1)}).squeeze(1)
-                s_prime, r, d, _ = env.step(a)
-                history.append((s, a, r, d))
-                s = np.where(np.expand_dims(d, -1), env.reset(d), s_prime)
-
-            batch = {}
-            batch['states'], batch['actions'], batch['rewards'], batch['dones'] = build_batch(history)
-
+        iterator = HorizonIterator(
+            env=env,
+            state_to_action=lambda s: sess.run(action_sample, {states: np.expand_dims(s, 1)}).squeeze(1),
+            horizon=args.horizon)
+        for batch, s in tqdm(iterator.iterate(s, num_steps=num_steps), desc='training'):
             sess.run(
                 [train_step, update_metrics['loss']],
                 {
                     states: batch['states'],
                     actions: batch['actions'],
                     rewards: batch['rewards'],
-                    state_prime: s_prime,  # TODO:
+                    state_prime: s,
                     dones: batch['dones']
                 })
 

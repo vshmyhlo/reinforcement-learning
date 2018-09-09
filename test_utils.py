@@ -5,6 +5,18 @@ import impala
 
 
 class UtilsTest(tf.test.TestCase):
+    def test_batch_return(self):
+        rewards = [[1, 2, 3]]
+        actual = utils.batch_return(rewards, gamma=0.9)
+        actual = self.evaluate(actual)
+        expected = [[
+            1 + 0.9 * 2 + 0.9**2 * 3,
+            2 + 0.9 * 3,
+            3
+        ]]
+
+        assert np.allclose(actual, expected)
+
     def test_batch_generalized_advantage_estimation(self):
         rewards = [[1., 1., 1., 1., 1., 1.]]
         values = [[3., 4., 5., 3., 4., 5.]]
@@ -20,11 +32,11 @@ class UtilsTest(tf.test.TestCase):
     def test_batch_n_step_return(self):
         rewards = [[1., 1., 1., 1., 1., 1.]]
         value_prime = [10.]
-        dones = [[False, False, True, False, False, True]]
+        dones = [[False, False, True, False, False, False]]
 
         actual = utils.batch_n_step_return(rewards, value_prime, dones, gamma=0.9)
         actual = self.evaluate(actual)
-        expected = [[2.71, 1.9, 1., 2.71, 1.9, 1.]]
+        expected = [[2.71, 1.9, 1., 10., 10., 10.]]
 
         assert np.allclose(actual, expected)
 
@@ -59,32 +71,9 @@ class UtilsTest(tf.test.TestCase):
         assert np.allclose(actual[1], expected[1])
 
 
-# def test_discounted_return():
-#     rewards = [[-1, 0, 1]]
-#     actual = utils.discounted_return(rewards, 0.9)
-#
-#     expected = [[
-#         5 + 0.9 * 4 + 0.9**2 * 3,
-#         4 + 0.9 * 3,
-#         3
-#     ]]
-#
-#     assert np.array_equal(actual, expected)
-
 def test_discounted_reward():
     rewards = np.array([[5, 4, 3]])
     actual = utils.discounted_reward(rewards, 0.9)
     expected = np.array([5 + 0.9 * 4 + 0.9**2 * 3])
 
     assert np.allclose(actual, expected)
-
-# def test_discounted_return():
-#     rewards = np.array([[5, 4, 3]])
-#     actual = utils.discounted_return(rewards, 0.9)
-#     expected = np.array([[
-#         5 + 0.9 * 4 + 0.9**2 * 3,
-#         4 + 0.9 * 3,
-#         3
-#     ]])
-#
-#     assert np.allclose(actual, expected)
