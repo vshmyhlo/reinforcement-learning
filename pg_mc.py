@@ -8,9 +8,6 @@ from tqdm import tqdm
 from network import PolicyCategorical
 
 
-# TODO: monitored session
-
-
 def build_batch(history):
     columns = zip(*history)
 
@@ -35,6 +32,7 @@ def main():
     utils.fix_seed(args.seed)
     experiment_path = os.path.join(args.experiment_path, args.env)
     env = gym.make(args.env)
+    env.seed(args.seed)
 
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
@@ -51,9 +49,9 @@ def main():
     # actor
     policy = PolicyCategorical(np.squeeze(env.action_space.shape))
     dist = policy(states, training=training)
-    action_samples = dist.sample()
+    action_sample = dist.sample()
     returns = utils.batch_return(rewards, gamma=args.gamma)
-    advantages = tf.stop_gradient(returns)
+    advantages = tf.stop_gradient(returns)  # TODO: normalize advantages?
     actor_loss = -tf.reduce_mean(dist.log_prob(actions) * advantages)
     actor_loss -= args.entropy_weight * tf.reduce_mean(dist.entropy())
 
@@ -78,12 +76,12 @@ def main():
     ])
 
     locals_init = tf.local_variables_initializer()
-    saver = tf.train.Saver()
-    with tf.Session() as sess, tf.summary.FileWriter(experiment_path) as writer:
-        if tf.train.latest_checkpoint(experiment_path):
-            saver.restore(sess, tf.train.latest_checkpoint(experiment_path))
-        else:
-            sess.run(tf.global_variables_initializer())
+
+    hooks = [
+        tf.train.CheckpointSaverHook(checkpoint_dir=experiment_path, save_steps=100)
+    ]
+    with tf.train.SingularMonitoredSession(checkpoint_dir=experiment_path, hooks=hooks) as sess, tf.summary.FileWriter(
+            experiment_path) as writer:
         sess.run(locals_init)
 
         for ep in tqdm(range(args.episodes), desc='training'):
@@ -92,7 +90,7 @@ def main():
             ep_r = 0
 
             for t in itertools.count():
-                a = sess.run(action_samples, {states: np.reshape(s, (1, 1, -1))}).squeeze((0, 1))
+                a = sess.run(action_sample, {states: np.reshape(s, (1, 1, -1))}).squeeze((0, 1))
                 s_prime, r, d, _ = env.step(a)
                 ep_r += r
 
@@ -120,7 +118,6 @@ def main():
                 summ, metr = sess.run([summary, metrics])
                 writer.add_summary(summ, step)
                 writer.flush()
-                saver.save(sess, os.path.join(experiment_path, 'model.ckpt'))
                 sess.run(locals_init)
 
 

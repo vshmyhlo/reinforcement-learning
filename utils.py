@@ -4,24 +4,48 @@ import numpy as np
 import tensorflow as tf
 
 
+class EpisodeTracker(object):
+    def __init__(self, state):
+        self.ep_length = np.zeros(state.shape[:1])
+        self.ep_reward = np.zeros(state.shape[:1])
+        self.finished_episodes = np.zeros((0, 2))
+
+    def update(self, reward, done):
+        self.ep_length += 1
+        self.ep_reward += reward
+
+        ep_length = self.ep_length[done]
+        ep_reward = self.ep_reward[done]
+
+        self.ep_length *= ~done
+        self.ep_reward *= ~done
+
+        finished_episodes = np.stack([ep_length, ep_reward], 1)
+        self.finished_episodes = np.concatenate([self.finished_episodes, finished_episodes], 0)
+
+    def reset(self):
+        finished_episodes = self.finished_episodes
+        self.finished_episodes = np.zeros((0, 2))
+
+        return finished_episodes
+
+
 def fix_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
     tf.set_random_seed(seed)
 
 
+def normalization(x):
+    mean = tf.reduce_mean(x)
+    std = tf.sqrt(tf.reduce_mean(tf.square(x - mean)))
+
+    return (x - mean) / std
+
+
 def flatten_batch_horizon(array):
     b, h, *shape = array.shape
     return array.reshape((b * h, *shape))
-
-
-def discounted_reward(rewards, gamma):
-    result = np.zeros(rewards.shape[:1])
-
-    for t in reversed(range(rewards.shape[1])):
-        result = rewards[:, t] + gamma * result
-
-    return result
 
 
 # TODO: test

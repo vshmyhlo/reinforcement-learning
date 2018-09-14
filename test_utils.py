@@ -71,9 +71,33 @@ class UtilsTest(tf.test.TestCase):
         assert np.allclose(actual[1], expected[1])
 
 
-def test_discounted_reward():
-    rewards = np.array([[5, 4, 3]])
-    actual = utils.discounted_reward(rewards, 0.9)
-    expected = np.array([5 + 0.9 * 4 + 0.9**2 * 3])
+def test_episode_tracker():
+    s = np.zeros((2,))
 
-    assert np.allclose(actual, expected)
+    episode_tracker = utils.EpisodeTracker(s)
+
+    assert np.array_equal(episode_tracker.reset(), np.zeros((0, 2)))
+
+    episode_tracker.update([1, 2], np.array([False, False]))
+    episode_tracker.update([1, 2], np.array([False, True]))
+    episode_tracker.update([1, 2], np.array([True, False]))
+    episode_tracker.update([1, 2], np.array([False, True]))
+
+    finished_episodes = episode_tracker.reset()
+
+    assert np.array_equal(finished_episodes, np.array([
+        [2, 4],
+        [3, 3],
+        [2, 4],
+    ]))
+
+    episode_tracker.update([1, 2], np.array([False, False]))
+    episode_tracker.update([1, 2], np.array([False, True]))
+    episode_tracker.update([1, 2], np.array([True, False]))
+   
+    finished_episodes = episode_tracker.reset()
+
+    assert np.array_equal(finished_episodes, np.array([
+        [2, 4],
+        [4, 4],
+    ]))

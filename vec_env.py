@@ -12,7 +12,7 @@ from enum import Enum
 # def __enter__(self)
 # def __exit__(self, exc_type, exc_value, traceback)
 
-Command = Enum('Command', ['RESET', 'STEP', 'CLOSE', 'GET_SPACES'])
+Command = Enum('Command', ['RESET', 'STEP', 'CLOSE', 'GET_SPACES', 'SEED'])
 
 
 def env_step(a):
@@ -33,6 +33,9 @@ def worker(env_fn, conn):
             conn.send(env.step(action))
         elif command is Command.GET_SPACES:
             conn.send((env.observation_space, env.action_space))
+        elif command is Command.SEED:
+            seed, = data
+            conn.send(env.seed(seed))
         elif command is Command.CLOSE:
             break
         else:
@@ -95,6 +98,12 @@ class VecEnv(object):
 
         for process in self._processes:
             process.join()
+
+    def seed(self, seed):
+        for i, conn in enumerate(self._conns):
+            conn.send((Command.SEED, seed + i))
+
+        [conn.recv() for conn in self._conns]
 
 
 class VecActionSpace(object):

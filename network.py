@@ -23,10 +23,10 @@ class Network(tf.layers.Layer):
 
     def call(self, input, training):
         input = self.dense_1(input)
-        input = tf.nn.relu(input)
+        input = tf.nn.tanh(input)  # TODO: works better than relu
 
         input = self.dense_2(input)
-        input = tf.nn.relu(input)
+        input = tf.nn.tanh(input)  # TODO: works better than relu
 
         return input
 

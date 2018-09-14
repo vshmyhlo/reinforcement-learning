@@ -9,8 +9,6 @@ from network import ValueFunction, PolicyCategorical
 from vec_env import VecEnv
 
 
-# TODO: seed env
-
 def build_batch(history):
     columns = zip(*history)
 
@@ -51,7 +49,7 @@ def main():
                     states: batch['states'],
                     actions: batch['actions'],
                     rewards: batch['rewards'],
-                    state_prime: s_prime,  # TODO:
+                    state_prime: s_prime,
                     dones: batch['dones']
                 })
 
@@ -84,6 +82,7 @@ def main():
     utils.fix_seed(args.seed)
     experiment_path = os.path.join(args.experiment_path, args.env)
     env = VecEnv([lambda: gym.make(args.env) for _ in range(os.cpu_count())])
+    env.seed(args.seed)
 
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
@@ -93,10 +92,10 @@ def main():
 
     # input
     b, t = None, None
-    states = tf.placeholder(tf.float32, [b, t, np.squeeze(env.observation_space.shape)], name='states')
+    states = tf.placeholder(tf.float32, [b, t, *env.observation_space.shape], name='states')
     actions = tf.placeholder(tf.int32, [b, t], name='actions')
     rewards = tf.placeholder(tf.float32, [b, t], name='rewards')
-    state_prime = tf.placeholder(tf.float32, [b, np.squeeze(env.observation_space.shape)], name='state_prime')
+    state_prime = tf.placeholder(tf.float32, [b, *env.observation_space.shape], name='state_prime')
     dones = tf.placeholder(tf.bool, [b, t], name='dones')
 
     # critic

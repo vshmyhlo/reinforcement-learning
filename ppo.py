@@ -9,6 +9,9 @@ from tqdm import tqdm
 from network import PolicyCategorical, ValueFunction
 
 
+# TODO: VecEnv meta
+# TODO: advantage norm in papers
+# TODO: seed
 # TODO: finished episodes in meta
 # TODO: normalization (advantage, state, value_target)
 # TODO: multiepoch
@@ -109,7 +112,7 @@ def main():
     values = value_function(states, training=training)
     value_prime = value_function(state_prime, training=training)
     advantages = utils.batch_generalized_advantage_estimation(rewards, values, value_prime, dones, args.gamma, args.lam)
-    advantages = tf.stop_gradient(advantages)
+    advantages = tf.stop_gradient(advantages)  # TODO: normalize advantages?
     value_targets = tf.stop_gradient(advantages + values)
     critic_loss = tf.reduce_mean(tf.square(value_targets - values))
 
