@@ -86,8 +86,8 @@ class Master(object):
         self.tqdm = tqdm()
 
     def update(self, gs):
-        _, step = self.sess.run(
-            [self.apply_gradients, self.global_step],
+        _, vs, step = self.sess.run(
+            [self.apply_gradients, self.vars, self.global_step],
             {grad: g for grad, g in zip(self.grad_holders, gs)})
 
         self.tqdm.update()
@@ -98,7 +98,7 @@ class Master(object):
             self.writer.flush()
             self.sess.run(self.locals_init)
 
-        return self.sess.run(self.vars)
+        return vs
 
     def metrics(self, ep_len, ep_rew):
         self.sess.run(self.update_metrics, {self.ep_length: ep_len, self.ep_reward: ep_rew})
