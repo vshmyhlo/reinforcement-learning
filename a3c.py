@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tqdm import tqdm
 import numpy as np
 import gym
 import os
@@ -8,7 +9,9 @@ from network import ValueFunction, PolicyCategorical
 import utils
 
 
+# TODO: num steps
 # TODO: track loss
+# TODO: seed
 # TODO: shared rms
 
 def build_batch(history):
@@ -26,7 +29,7 @@ def build_parser():
     parser.add_argument('--steps', type=int, default=10000)
     parser.add_argument('--entropy-weight', type=float, default=1e-2)
     parser.add_argument('--gamma', type=float, default=0.99)
-    parser.add_argument('--num-workers', type=int, default=os.cpu_count())
+    parser.add_argument('--workers', type=int, default=os.cpu_count())
     parser.add_argument('--monitor', action='store_true')
 
     return parser
@@ -35,6 +38,7 @@ def build_parser():
 @ray.remote
 class Master(object):
     def __init__(self, args):
+        experiment_path = os.path.join(args.experiment_path, args.env)
         env = gym.make(args.env)
         self.global_step = tf.train.get_or_create_global_step()  # TODO: self?
         training = True
@@ -68,20 +72,25 @@ class Master(object):
             tf.summary.scalar('ep_length', metrics['ep_length']),
             tf.summary.scalar('ep_reward', metrics['ep_reward'])
         ])
+
+        # init
         self.locals_init = tf.local_variables_initializer()
 
         # session
         hooks = [
-            tf.train.CheckpointSaverHook(checkpoint_dir=args.experiment_path, save_steps=100)
+            tf.train.CheckpointSaverHook(checkpoint_dir=experiment_path, save_steps=100)
         ]
-        self.sess = tf.train.SingularMonitoredSession(checkpoint_dir=args.experiment_path, hooks=hooks)
-        self.writer = tf.summary.FileWriter(args.experiment_path)
+        self.sess = tf.train.SingularMonitoredSession(checkpoint_dir=experiment_path, hooks=hooks)
+        self.writer = tf.summary.FileWriter(experiment_path)
         self.sess.run(self.locals_init)
+        self.tqdm = tqdm()
 
     def update(self, gs):
         _, step = self.sess.run(
             [self.apply_gradients, self.global_step],
             {grad: g for grad, g in zip(self.grad_holders, gs)})
+
+        self.tqdm.update()
 
         if step % 100 == 0:
             summ = self.sess.run(self.summary)
@@ -124,7 +133,7 @@ class Worker(object):
         policy = PolicyCategorical(np.squeeze(self.env.action_space.shape))
         dist = policy(self.states, training=training)
         self.action_sample = dist.sample()
-        advantages = tf.stop_gradient(utils.normalization(errors))
+        advantages = tf.stop_gradient(errors)  # TODO: normalization
         actor_loss = -tf.reduce_mean(dist.log_prob(self.actions) * advantages)
         actor_loss -= args.entropy_weight * tf.reduce_mean(dist.entropy())
 
@@ -140,54 +149,55 @@ class Worker(object):
         self.var_holders = [tf.placeholder(var.dtype, var.shape) for var in vars]
         self.update_vars = tf.group(*[var.assign(var_holder) for var, var_holder in zip(vars, self.var_holders)])
 
+        # init
         self.globals_init = tf.global_variables_initializer()
 
+        # session
+        self.sess = tf.Session()
+        self.sess.run(self.globals_init)
+
     def train(self):
-        with tf.Session() as sess:
-            sess.run(self.globals_init)
+        s = self.env.reset()
+        t = 0
+        ep_rew = 0
 
-            s = self.env.reset()
-            t = 0
-            ep_rew = 0
+        for _ in itertools.count():
+            history = []
+            for _ in range(self.args.horizon):
+                a = self.sess.run(self.action_sample, {self.states: np.reshape(s, (1, 1, -1))}).squeeze((0, 1))
+                s_prime, r, d, _ = self.env.step(a)
 
-            for _ in itertools.count():
-                history = []
+                t += 1
+                ep_rew += r
 
-                for _ in range(self.args.horizon):
-                    a = sess.run(self.action_sample, {self.states: np.reshape(s, (1, 1, -1))}).squeeze((0, 1))
-                    s_prime, r, d, _ = self.env.step(a)
+                history.append(([s], [a], [r], [d]))
 
-                    t += 1
-                    ep_rew += r
+                if d:
+                    self.master.metrics.remote(t, ep_rew)
 
-                    history.append(([s], [a], [r], [d]))
+                    s = self.env.reset()
+                    t = 0
+                    ep_rew = 0
 
-                    if d:
-                        self.master.metrics.remote(t, ep_rew)
+                    break
+                else:
+                    s = s_prime
 
-                        s = self.env.reset()
-                        t = 0
-                        ep_rew = 0
+            batch = {}
+            batch['states'], batch['actions'], batch['rewards'], batch['dones'] = build_batch(history)
 
-                        break
-                    else:
-                        s = s_prime
+            gs = self.sess.run(
+                self.grads,
+                {
 
-                batch = {}
-                batch['states'], batch['actions'], batch['rewards'], batch['dones'] = build_batch(history)
-
-                gs = sess.run(
-                    self.grads,  # TODO: update metrics?
-                    {
-
-                        self.states: batch['states'],
-                        self.actions: batch['actions'],
-                        self.rewards: batch['rewards'],
-                        self.state_prime: [s_prime],
-                        self.dones: batch['dones']
-                    })
-                vs = ray.get(self.master.update.remote(gs))
-                sess.run(self.update_vars, {var_holder: v for var_holder, v in zip(self.var_holders, vs)})
+                    self.states: batch['states'],
+                    self.actions: batch['actions'],
+                    self.rewards: batch['rewards'],
+                    self.state_prime: [s_prime],
+                    self.dones: batch['dones']
+                })
+            vs = ray.get(self.master.update.remote(gs))
+            self.sess.run(self.update_vars, {var_holder: v for var_holder, v in zip(self.var_holders, vs)})
 
 
 def main():
@@ -196,7 +206,7 @@ def main():
     ray.init()
 
     master = Master.remote(args)
-    workers = [Worker.remote(master, args) for _ in range(args.num_workers)]
+    workers = [Worker.remote(master, args) for _ in range(args.workers)]
     tasks = [worker.train.remote() for worker in workers]
     ray.get(tasks)
 

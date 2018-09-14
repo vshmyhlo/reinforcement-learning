@@ -226,7 +226,7 @@ def main():
 
             _, _, step = sess.run(
                 [train_step, update_metrics, global_step],
-                {actions: a, rewards: [[0] * (timesteps - 1) + [r]]})
+                {actions: a, rewards: [[0] * (timesteps - 1) + [r]], ep_reward: r})
 
             summ, metr = sess.run([summary, metrics])
             writer.add_summary(summ, step)

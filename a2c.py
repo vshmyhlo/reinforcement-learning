@@ -24,6 +24,7 @@ def build_parser():
     parser.add_argument('--steps', type=int, default=10000)
     parser.add_argument('--entropy-weight', type=float, default=1e-2)
     parser.add_argument('--gamma', type=float, default=0.99)
+    parser.add_argument('--workers', type=int, default=os.cpu_count())
     parser.add_argument('--monitor', action='store_true')
 
     return parser
@@ -60,19 +61,19 @@ def main():
 
         for _ in tqdm(range(num_episodes), desc='evaluating'):
             s = env.reset()
-            ep_r = 0
+            ep_rew = 0
 
             for t in itertools.count():
                 a = sess.run(action_sample, {states: np.reshape(s, (1, 1, -1))}).squeeze((0, 1))
                 s_prime, r, d, _ = env.step(a)
-                ep_r += r
+                ep_rew += r
 
                 if d:
                     break
                 else:
                     s = s_prime
 
-            sess.run([update_metrics[k] for k in update_metrics if k != 'loss'], {ep_length: t, ep_reward: ep_r})
+            sess.run([update_metrics[k] for k in update_metrics if k != 'loss'], {ep_length: t, ep_reward: ep_rew})
 
         step, summ, metr = sess.run([global_step, summary, metrics])
         writer.add_summary(summ, step)
@@ -81,7 +82,7 @@ def main():
     args = build_parser().parse_args()
     utils.fix_seed(args.seed)
     experiment_path = os.path.join(args.experiment_path, args.env)
-    env = VecEnv([lambda: gym.make(args.env) for _ in range(os.cpu_count())])
+    env = VecEnv([lambda: gym.make(args.env) for _ in range(args.workers)])
     env.seed(args.seed)
 
     if args.monitor:
@@ -111,8 +112,8 @@ def main():
     policy = PolicyCategorical(np.squeeze(env.action_space.shape))
     dist = policy(states, training=training)
     action_sample = dist.sample()
-    advantage = tf.stop_gradient(errors)
-    actor_loss = -tf.reduce_mean(dist.log_prob(actions) * advantage)
+    advantages = tf.stop_gradient(errors)  # TODO: normalization
+    actor_loss = -tf.reduce_mean(dist.log_prob(actions) * advantages)
     actor_loss -= args.entropy_weight * tf.reduce_mean(dist.entropy())
 
     # training
@@ -136,6 +137,7 @@ def main():
     ])
     locals_init = tf.local_variables_initializer()
 
+    # session
     hooks = [
         tf.train.CheckpointSaverHook(checkpoint_dir=experiment_path, save_steps=100)
     ]
