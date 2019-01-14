@@ -9,7 +9,7 @@ from tensorboardX import SummaryWriter
 import torch
 import itertools
 from tqdm import tqdm
-from torch_rl.network import PolicyCategorical
+from torch_rl.network import PolicyCategorical, ValueFunction
 from torch_rl.utils import batch_return
 
 
@@ -65,8 +65,10 @@ def main():
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
 
+    value_function = ValueFunction(np.squeeze(env.observation_space.shape))
     policy = PolicyCategorical(np.squeeze(env.observation_space.shape), np.squeeze(env.action_space.shape))
-    optimizer = build_optimizer(args.optimizer, policy.parameters(), args.learning_rate)
+    optimizer = build_optimizer(
+        args.optimizer, list(value_function.parameters()) + list(policy.parameters()), args.learning_rate)
     metrics = {'loss': Mean(), 'ep_length': Mean(), 'ep_reward': Mean()}
 
     if os.path.exists(os.path.join(experiment_path, 'parameters')):
@@ -92,14 +94,21 @@ def main():
 
         states, actions, rewards = build_batch(history)
 
+        # critic
+        values = value_function(states)
+        returns = batch_return(rewards, gamma=args.gamma)
+        errors = returns - values
+        critic_loss = (errors**2).mean()
+
         # actor
         dist = policy(states)
-        returns = batch_return(rewards, gamma=args.gamma)
-        advantages = returns.detach()
-        loss = -(dist.log_prob(actions) * advantages).mean()
-        loss -= args.entropy_weight * torch.mean(dist.entropy())
+        advantages = errors.detach()
+        actor_loss = -(dist.log_prob(actions) * advantages).mean()
+        actor_loss -= args.entropy_weight * torch.mean(dist.entropy())
 
         # training
+        loss = actor_loss + 0.5 * critic_loss
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

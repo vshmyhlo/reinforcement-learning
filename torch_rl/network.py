@@ -1,54 +1,45 @@
 import torch.nn as nn
 import torch
 
-
-# TODO: set trainable
-# TODO:  initialization
+SIZE = 256
 
 
 class Network(nn.Module):
     def __init__(self, in_features):
         super().__init__()
 
-        self.dense_1 = nn.Linear(in_features, 32)
-        self.dense_2 = nn.Linear(32, 32)
+        self.linear_1 = nn.Linear(in_features, SIZE)
+        # self.linear_2 = nn.Linear(SIZE, SIZE)
+        # self.act = nn.ReLU(inplace=True)
+        self.act = nn.Tanh()
 
-        nn.init.xavier_normal_(self.dense_1.weight)
-        nn.init.xavier_normal_(self.dense_2.weight)
+        nn.init.xavier_normal_(self.linear_1.weight)
+        # nn.init.xavier_normal_(self.linear_2.weight)
 
     def forward(self, input):
-        input = self.dense_1(input)
-        input = torch.tanh(input)
-
-        input = self.dense_2(input)
-        input = torch.tanh(input)
+        input = self.linear_1(input)
+        input = self.act(input)
+        # input = self.linear_2(input)
+        # input = self.act(input)
 
         return input
 
 
-# class ValueFunction(tf.layers.Layer):
-#     def __init__(self,
-#                  trainable=True,
-#                  name='value_function'):
-#         super().__init__(name=name)
-#
-#         kernel_initializer = tf.contrib.layers.variance_scaling_initializer(
-#             factor=2.0, mode='FAN_IN', uniform=False)
-#         kernel_regularizer = tf.contrib.layers.l2_regularizer(scale=1e-4)
-#
-#         self.net = Network(trainable=trainable)
-#         self.dense = tf.layers.Dense(
-#             1,
-#             kernel_initializer=kernel_initializer,
-#             kernel_regularizer=kernel_regularizer,
-#             trainable=trainable)
-#
-#     def call(self, input, training):
-#         input = self.net(input, training=training)
-#         input = self.dense(input)
-#         input = tf.squeeze(input, -1)
-#
-#         return input
+class ValueFunction(nn.Module):
+    def __init__(self, state_size):
+        super().__init__()
+
+        self.net = Network(state_size)
+        self.linear = nn.Linear(SIZE, 1)
+
+        nn.init.xavier_normal_(self.linear.weight)
+
+    def forward(self, input):
+        input = self.net(input)
+        input = self.linear(input)
+        input = input.squeeze(-1)
+
+        return input
 
 
 class PolicyCategorical(nn.Module):
@@ -56,7 +47,7 @@ class PolicyCategorical(nn.Module):
         super().__init__()
 
         self.net = Network(state_size)
-        self.dense = nn.Linear(32, num_actions)
+        self.dense = nn.Linear(SIZE, num_actions)
 
         nn.init.xavier_normal_(self.dense.weight)
 
