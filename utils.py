@@ -43,23 +43,6 @@ def normalization(x):
     return (x - mean) / std
 
 
-def flatten_batch_horizon(array):
-    b, h, *shape = array.shape
-    return array.reshape((b * h, *shape))
-
-
-# TODO: test
-def discounted_return(rewards, gamma):
-    returns = np.zeros(rewards.shape)
-    ret = 0
-
-    for t in reversed(range(rewards.shape[0])):
-        ret = rewards[t] + gamma * ret
-        returns[t] = ret
-
-    return returns
-
-
 def batch_discounted_return(rewards, gamma):
     returns = np.zeros(rewards.shape)
     ret = np.zeros(rewards.shape[:1])

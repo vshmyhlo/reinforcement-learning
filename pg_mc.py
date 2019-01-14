@@ -51,7 +51,7 @@ def main():
     dist = policy(states, training=training)
     action_sample = dist.sample()
     returns = utils.batch_return(rewards, gamma=args.gamma)
-    advantages = tf.stop_gradient(returns)  # TODO: normalize advantages?
+    advantages = tf.stop_gradient(returns)  # TODO: normalize?
     actor_loss = -tf.reduce_mean(dist.log_prob(actions) * advantages)
     actor_loss -= args.entropy_weight * tf.reduce_mean(dist.entropy())
 

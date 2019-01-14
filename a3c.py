@@ -44,7 +44,7 @@ class Master(object):
         training = True
 
         # input
-        b, t = None, None
+        b, t = 1, None
         states = tf.placeholder(tf.float32, [b, t, *env.observation_space.shape], name='states')
 
         # critic

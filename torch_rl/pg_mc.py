@@ -1,5 +1,7 @@
 import utils
-from metrics import Mean
+from ticpfptp.metrics import Mean
+from ticpfptp.format import args_to_string
+from ticpfptp.torch import fix_seed
 import numpy as np
 import gym
 import os
@@ -19,9 +21,13 @@ from torch_rl.utils import batch_return
 
 
 def build_batch(history):
-    columns = zip(*history)
+    states, actions, rewards = zip(*history)
 
-    return [torch.tensor(col, dtype=torch.float32).transpose(0, 1) for col in columns]
+    states = torch.tensor(states).transpose(0, 1).float()
+    actions = torch.tensor(actions).transpose(0, 1)
+    rewards = torch.tensor(rewards).transpose(0, 1)
+
+    return states, actions, rewards
 
 
 def build_parser():
@@ -38,28 +44,9 @@ def build_parser():
 
 
 def main():
-    def train_step(states, actions, rewards):
-        optimizer.zero_grad()
-
-        # actor
-        dist = policy(states)
-        returns = batch_return(rewards, gamma=args.gamma)
-        # advantages = tf.stop_gradient(utils.normalization(returns))
-        advantages = returns.detach()
-        actor_loss = -torch.mean(dist.log_prob(actions) * advantages)
-        actor_loss -= args.entropy_weight * torch.mean(dist.entropy())
-
-        # training
-        loss = actor_loss
-
-        loss.backward()
-        optimizer.step()
-        global_step.data += 1
-
-        return global_step, loss.item()
-
     args = build_parser().parse_args()
-    utils.fix_seed(args.seed)
+    print(args_to_string(args))
+    fix_seed(args.seed)
     experiment_path = os.path.join(args.experiment_path, args.env)
     env = gym.make(args.env)
     env.seed(args.seed)
@@ -68,7 +55,6 @@ def main():
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
 
-    global_step = torch.tensor(0)
     policy = PolicyCategorical(np.squeeze(env.observation_space.shape), np.squeeze(env.action_space.shape))
     params = policy.parameters()
     optimizer = torch.optim.Adam(params, args.learning_rate, weight_decay=1e-4)
@@ -78,13 +64,13 @@ def main():
         policy.load_state_dict(torch.load(os.path.join(experiment_path, 'parameters')))
 
     policy.train()
-    for _ in tqdm(range(args.episodes), desc='training'):
+    for step in tqdm(range(args.episodes), desc='training'):
         history = []
         s = env.reset()
         ep_reward = 0
 
         for t in itertools.count():
-            a = policy(torch.tensor(s, dtype=torch.float32)).sample().item()
+            a = policy(torch.tensor(s).float()).sample().item()
             s_prime, r, d, _ = env.step(a)
             ep_reward += r
 
@@ -95,19 +81,26 @@ def main():
             else:
                 s = s_prime
 
-        batch = {}
-        batch['states'], batch['actions'], batch['rewards'] = build_batch(history)
+        states, actions, rewards = build_batch(history)
 
-        step, loss = train_step(**batch)
-        metrics['loss'].update(loss)
+        # actor
+        dist = policy(states)
+        returns = batch_return(rewards, gamma=args.gamma)
+        advantages = returns.detach()
+        loss = -(dist.log_prob(actions) * advantages).mean()
+        loss -= args.entropy_weight * torch.mean(dist.entropy())
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        metrics['loss'].update(loss.data.cpu().numpy())
         metrics['ep_length'].update(t)
         metrics['ep_reward'].update(ep_reward)
 
         if step % 100 == 0:
             for k in metrics:
-                writer.add_scalar(k, metrics[k].compute(), step)
-            torch.save(policy.state_dict(), os.path.join(experiment_path, 'parameters'))
-            {metrics[k].reset() for k in metrics}
+                writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=step)
 
 
 if __name__ == '__main__':

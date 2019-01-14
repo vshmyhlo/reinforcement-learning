@@ -60,7 +60,7 @@ def main():
     policy = PolicyCategorical(env.action_space.n)
     dist = policy(states, training=training)
     action_sample = dist.sample()
-    advantages = tf.stop_gradient(errors)  # TODO: normalize advantages?
+    advantages = tf.stop_gradient(errors)  # TODO: normalize?
     actor_loss = -tf.reduce_mean(dist.log_prob(actions) * advantages)
     actor_loss -= args.entropy_weight * tf.reduce_mean(dist.entropy())
 
