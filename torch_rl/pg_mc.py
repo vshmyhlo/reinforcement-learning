@@ -30,6 +30,15 @@ def build_batch(history):
     return states, actions, rewards
 
 
+def build_optimizer(optimizer, parameters, learning_rate):
+    if optimizer == 'adam':
+        return torch.optim.Adam(parameters, learning_rate, weight_decay=1e-4)
+    elif optimizer == 'momentum':
+        return torch.optim.SGD(parameters, learning_rate, momentum=0.9, weight_decay=1e-4)
+    else:
+        raise AssertionError('invalid optimizer {}'.format(optimizer))
+
+
 def build_parser():
     parser = utils.ArgumentParser()
     parser.add_argument('--learning-rate', type=float, default=1e-3)
@@ -56,8 +65,7 @@ def main():
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
 
     policy = PolicyCategorical(np.squeeze(env.observation_space.shape), np.squeeze(env.action_space.shape))
-    params = policy.parameters()
-    optimizer = torch.optim.Adam(params, args.learning_rate, weight_decay=1e-4)
+    optimizer = build_optimizer(args.optimizer, policy.parameters(), args.learning_rate)
     metrics = {'loss': Mean(), 'ep_length': Mean(), 'ep_reward': Mean()}
 
     if os.path.exists(os.path.join(experiment_path, 'parameters')):
