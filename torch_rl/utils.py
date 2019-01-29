@@ -11,9 +11,9 @@ def batch_return(rewards, gamma):
 
 
 def batch_n_step_return(rewards, value_prime, dones, gamma):
-    assert rewards.dim() == 2
+    assert rewards.dim() == dones.dim() == 2
     assert value_prime.dim() == 1
-    assert dones.dim() == 2
+    assert rewards.size(1) == dones.size(1)
 
     mask = (1 - dones).float()
     ret = value_prime

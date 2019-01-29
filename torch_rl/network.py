@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 
-SIZE = 256
+SIZE = 64
 
 
 class Network(nn.Module):
@@ -9,18 +9,17 @@ class Network(nn.Module):
         super().__init__()
 
         self.linear_1 = nn.Linear(in_features, SIZE)
-        # self.linear_2 = nn.Linear(SIZE, SIZE)
-        # self.act = nn.ReLU(inplace=True)
-        self.act = nn.Tanh()
+        self.linear_2 = nn.Linear(SIZE, SIZE)
+        self.activation = nn.ReLU(inplace=True)
 
         nn.init.xavier_normal_(self.linear_1.weight)
-        # nn.init.xavier_normal_(self.linear_2.weight)
+        nn.init.xavier_normal_(self.linear_2.weight)
 
     def forward(self, input):
         input = self.linear_1(input)
-        input = self.act(input)
-        # input = self.linear_2(input)
-        # input = self.act(input)
+        input = self.activation(input)
+        input = self.linear_2(input)
+        input = self.activation(input)
 
         return input
 

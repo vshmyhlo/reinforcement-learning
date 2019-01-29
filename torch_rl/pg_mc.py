@@ -25,7 +25,7 @@ def build_batch(history):
 
     states = torch.tensor(states).transpose(0, 1).float()
     actions = torch.tensor(actions).transpose(0, 1)
-    rewards = torch.tensor(rewards).transpose(0, 1)
+    rewards = torch.tensor(rewards).transpose(0, 1).float()
 
     return states, actions, rewards
 
@@ -69,20 +69,17 @@ def main():
     optimizer = build_optimizer(args.optimizer, policy.parameters(), args.learning_rate)
     metrics = {'loss': Mean(), 'ep_length': Mean(), 'ep_reward': Mean()}
 
-    if os.path.exists(os.path.join(experiment_path, 'parameters')):
-        policy.load_state_dict(torch.load(os.path.join(experiment_path, 'parameters')))
-
+    # training
     policy.train()
-    for step in tqdm(range(args.episodes), desc='training'):
+    for episode in tqdm(range(args.episodes), desc='training'):
         history = []
         s = env.reset()
         ep_reward = 0
 
-        for t in itertools.count():
+        for ep_length in itertools.count():
             a = policy(torch.tensor(s).float()).sample().item()
             s_prime, r, d, _ = env.step(a)
             ep_reward += r
-
             history.append(([s], [a], [r]))
 
             if d:
@@ -105,12 +102,12 @@ def main():
         optimizer.step()
 
         metrics['loss'].update(loss.data.cpu().numpy())
-        metrics['ep_length'].update(t)
+        metrics['ep_length'].update(ep_length)
         metrics['ep_reward'].update(ep_reward)
 
-        if step % 100 == 0:
+        if episode % 100 == 0:
             for k in metrics:
-                writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=step)
+                writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
 
 
 if __name__ == '__main__':
