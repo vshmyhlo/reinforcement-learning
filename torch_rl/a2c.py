@@ -115,7 +115,7 @@ def main():
 
         # actor
         dist = policy(states)
-        advantages = normalize(errors.detach())
+        advantages = normalize(errors.detach())  # TODO: normalize?
         actor_loss = -(dist.log_prob(actions) * advantages).mean()
         actor_loss -= args.entropy_weight * torch.mean(dist.entropy())
 
