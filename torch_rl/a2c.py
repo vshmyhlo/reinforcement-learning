@@ -7,8 +7,6 @@ import gym
 import os
 from tensorboardX import SummaryWriter
 import torch
-import itertools
-from tqdm import tqdm
 from torch_rl.network import PolicyCategorical, ValueFunction
 from torch_rl.utils import batch_n_step_return
 from vec_env import VecEnv
@@ -48,7 +46,7 @@ def build_parser():
     parser.add_argument('--horizon', type=int, default=32)
     parser.add_argument('--learning-rate', type=float, default=1e-3)
     parser.add_argument('--optimizer', type=str, choices=['adam', 'momentum'], default='adam')
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/torch/pg-mc')
+    parser.add_argument('--experiment-path', type=str, default='./tf_log/torch/a2c')
     parser.add_argument('--env', type=str, required=True)
     parser.add_argument('--episodes', type=int, default=10000)
     parser.add_argument('--entropy-weight', type=float, default=1e-2)

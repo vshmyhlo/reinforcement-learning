@@ -43,7 +43,7 @@ def build_parser():
     parser = utils.ArgumentParser()
     parser.add_argument('--learning-rate', type=float, default=1e-3)
     parser.add_argument('--optimizer', type=str, choices=['adam', 'momentum'], default='adam')
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/torch/pg-mc')
+    parser.add_argument('--experiment-path', type=str, default='./tf_log/torch/ac-mc')
     parser.add_argument('--env', type=str, required=True)
     parser.add_argument('--episodes', type=int, default=10000)
     parser.add_argument('--entropy-weight', type=float, default=1e-2)
