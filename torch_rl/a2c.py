@@ -8,15 +8,11 @@ import os
 from tensorboardX import SummaryWriter
 import torch
 from torch_rl.network import PolicyCategorical, ValueFunction
-from torch_rl.utils import batch_n_step_return
+from torch_rl.utils import batch_n_step_return, normalize
 from vec_env import VecEnv
 
 
 # TODO: revisit stat calculation
-# TODO: train/eval
-# TODO: bn update
-# TODO: return normalization
-# TODO: monitored session
 # TODO: normalize advantage?
 
 
@@ -76,6 +72,7 @@ def main():
     metrics = {'loss': Mean(), 'ep_length': Mean(), 'ep_reward': Mean()}
 
     # training
+    value_function.train()
     policy.train()
     episode = 0
     ep_length = np.zeros([args.workers])
@@ -118,7 +115,7 @@ def main():
 
         # actor
         dist = policy(states)
-        advantages = errors.detach()
+        advantages = normalize(errors.detach())
         actor_loss = -(dist.log_prob(actions) * advantages).mean()
         actor_loss -= args.entropy_weight * torch.mean(dist.entropy())
 

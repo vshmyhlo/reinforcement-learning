@@ -24,3 +24,7 @@ def batch_n_step_return(rewards, value_prime, dones, gamma):
         returns[:, t] = ret
 
     return returns
+
+
+def normalize(input):
+    return (input - input.mean()) / input.std()
