@@ -8,7 +8,7 @@ import os
 from tensorboardX import SummaryWriter
 import torch
 from torch_rl.network import PolicyCategorical, ValueFunction
-from torch_rl.utils import batch_n_step_return, normalize
+from torch_rl.utils import batch_n_step_return
 from vec_env import VecEnv
 
 
@@ -40,7 +40,7 @@ def build_optimizer(optimizer, parameters, learning_rate):
 def build_parser():
     parser = utils.ArgumentParser()
     parser.add_argument('--horizon', type=int, default=32)
-    parser.add_argument('--learning-rate', type=float, default=1e-3)
+    parser.add_argument('--learning-rate', type=float, default=1e-2)
     parser.add_argument('--optimizer', type=str, choices=['adam', 'momentum'], default='adam')
     parser.add_argument('--experiment-path', type=str, default='./tf_log/torch/a2c')
     parser.add_argument('--env', type=str, required=True)
@@ -115,12 +115,12 @@ def main():
 
         # actor
         dist = policy(states)
-        advantages = normalize(errors.detach())  # TODO: normalize?
+        advantages = errors.detach()  # TODO: normalize?
         actor_loss = -(dist.log_prob(actions) * advantages).mean()
-        actor_loss -= args.entropy_weight * torch.mean(dist.entropy())
+        actor_loss -= args.entropy_weight * dist.entropy().mean()
 
         # training
-        loss = actor_loss + 0.5 * critic_loss
+        loss = actor_loss + critic_loss
 
         optimizer.zero_grad()
         loss.backward()

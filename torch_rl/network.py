@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 
-SIZE = 64
+SIZE = 32
 
 
 class Network(nn.Module):
@@ -53,7 +53,6 @@ class PolicyCategorical(nn.Module):
     def forward(self, input):
         input = self.net(input)
         input = self.dense(input)
-
         dist = torch.distributions.Categorical(logits=input)
 
         return dist

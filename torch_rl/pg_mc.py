@@ -41,7 +41,7 @@ def build_optimizer(optimizer, parameters, learning_rate):
 
 def build_parser():
     parser = utils.ArgumentParser()
-    parser.add_argument('--learning-rate', type=float, default=1e-3)
+    parser.add_argument('--learning-rate', type=float, default=1e-2)
     parser.add_argument('--optimizer', type=str, choices=['adam', 'momentum'], default='adam')
     parser.add_argument('--experiment-path', type=str, default='./tf_log/torch/pg-mc')
     parser.add_argument('--env', type=str, required=True)
@@ -94,7 +94,7 @@ def main():
         returns = batch_return(rewards, gamma=args.gamma)
         advantages = returns.detach()
         loss = -(dist.log_prob(actions) * advantages).mean()
-        loss -= args.entropy_weight * torch.mean(dist.entropy())
+        loss -= args.entropy_weight * dist.entropy().mean()
 
         # training
         optimizer.zero_grad()
