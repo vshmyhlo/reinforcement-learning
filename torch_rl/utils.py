@@ -3,27 +3,41 @@ import torch
 
 # TODO: test
 
-def batch_return(rewards, gamma):
-    value_prime = torch.zeros(rewards.shape[:1])
-    dones = torch.full(rewards.shape, False)
+def total_return(rewards, gamma):
+    value_prime = torch.zeros(rewards.size(0))
+    dones = torch.full_like(rewards, False)
 
-    return batch_n_step_return(rewards, value_prime, dones, gamma)
+    return n_step_return(rewards, value_prime, dones, gamma)
 
 
-def batch_n_step_return(rewards, value_prime, dones, gamma):
+def n_step_return(rewards, value_prime, dones, gamma):
     assert rewards.dim() == dones.dim() == 2
     assert value_prime.dim() == 1
     assert rewards.size(1) == dones.size(1)
 
-    mask = (1 - dones).float()
+    masks = (1 - dones).float()
     ret = value_prime
     returns = torch.zeros_like(rewards)
 
     for t in reversed(range(rewards.size(1))):
-        ret = rewards[:, t] + mask[:, t] * gamma * ret
+        ret = rewards[:, t] + masks[:, t] * gamma * ret
         returns[:, t] = ret
 
     return returns
+
+
+def generalized_advantage_estimation(rewards, values, value_prime, dones, gamma, lam):
+    values_prime = torch.cat([values[:, 1:], value_prime.unsqueeze(1)], 1)
+    masks = (1 - dones).float()
+    gae = torch.zeros(rewards.size(0))
+    gaes = torch.zeros_like(rewards)
+
+    for t in reversed(range(rewards.size(1))):
+        delta = rewards[:, t] + masks[:, t] * gamma * values_prime[:, t] - values[:, t]
+        gae = delta + masks[:, t] * gamma * lam * gae
+        gaes[:, t] = gae
+
+    return gaes
 
 
 def normalize(input):

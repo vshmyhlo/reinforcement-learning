@@ -10,7 +10,7 @@ import torch
 import itertools
 from tqdm import tqdm
 from torch_rl.network import PolicyCategorical
-from torch_rl.utils import batch_return
+from torch_rl.utils import total_return
 
 
 # TODO: train/eval
@@ -91,7 +91,7 @@ def main():
 
         # actor
         dist = policy(states)
-        returns = batch_return(rewards, gamma=args.gamma)
+        returns = total_return(rewards, gamma=args.gamma)
         advantages = returns.detach()
         loss = -(dist.log_prob(actions) * advantages).mean()
         loss -= args.entropy_weight * dist.entropy().mean()

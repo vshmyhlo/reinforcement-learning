@@ -9,7 +9,7 @@ import os
 from tensorboardX import SummaryWriter
 import torch
 from torch_rl.network import PolicyCategorical, ValueFunction
-from torch_rl.utils import n_step_return
+from torch_rl.utils import generalized_advantage_estimation
 from vec_env import VecEnv
 
 
@@ -40,7 +40,7 @@ def build_optimizer(optimizer, parameters, learning_rate):
 
 def build_parser():
     parser = utils.ArgumentParser()
-    parser.add_argument('--horizon', type=int, default=32)
+    parser.add_argument('--horizon', type=int, default=256 * 8 // os.cpu_count())
     parser.add_argument('--learning-rate', type=float, default=1e-2)
     parser.add_argument('--optimizer', type=str, choices=['adam', 'momentum'], default='adam')
     parser.add_argument('--experiment-path', type=str, default='./tf_log/torch/a2c')
@@ -110,13 +110,14 @@ def main():
         # critic
         values = value_function(states)
         value_prime = value_function(state_prime).detach()
-        returns = n_step_return(rewards, value_prime, dones, gamma=args.gamma)
+        advantages = generalized_advantage_estimation(
+            rewards, values.detach(), value_prime, dones, gamma=args.gamma, lam=0.98)
+        returns = (advantages + values).detach()
         errors = returns - values
         critic_loss = (errors**2).mean()
 
         # actor
         dist = policy(states)
-        advantages = errors.detach()  # TODO: normalize?
         actor_loss = -(dist.log_prob(actions) * advantages).mean()
         actor_loss -= args.entropy_weight * dist.entropy().mean()
 

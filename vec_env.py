@@ -3,8 +3,6 @@ import numpy as np
 from enum import Enum
 
 # TODO: refactor
-# TODO: autoreset
-
 # def __enter__(self)
 # def __exit__(self, exc_type, exc_value, traceback)
 

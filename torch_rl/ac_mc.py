@@ -10,7 +10,7 @@ import torch
 import itertools
 from tqdm import tqdm
 from torch_rl.network import PolicyCategorical, ValueFunction
-from torch_rl.utils import batch_return
+from torch_rl.utils import total_return
 
 
 # TODO: train/eval
@@ -93,7 +93,7 @@ def main():
 
         # critic
         values = value_function(states)
-        returns = batch_return(rewards, gamma=args.gamma)
+        returns = total_return(rewards, gamma=args.gamma)
         errors = returns - values
         critic_loss = (errors**2).mean()
 
