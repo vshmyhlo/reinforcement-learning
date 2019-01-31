@@ -26,6 +26,7 @@ def n_step_return(rewards, value_prime, dones, gamma):
     return returns
 
 
+# TODO: test
 def generalized_advantage_estimation(rewards, values, value_prime, dones, gamma, lam):
     values_prime = torch.cat([values[:, 1:], value_prime.unsqueeze(1)], 1)
     masks = (1 - dones).float()
