@@ -1,25 +1,32 @@
-import torch.nn as nn
 import torch
+import torch.nn as nn
 
 SIZE = 32
+
+
+class Model(nn.Module):
+    def __init__(self, policy=None):
+        super().__init__()
+       
+        self.policy = policy
 
 
 class Network(nn.Module):
     def __init__(self, in_features):
         super().__init__()
 
-        self.linear_1 = nn.Linear(in_features, SIZE)
-        self.linear_2 = nn.Linear(SIZE, SIZE)
-        self.activation = nn.ReLU(inplace=True)
+        self.l_1 = nn.Linear(in_features, SIZE)
+        self.l_2 = nn.Linear(SIZE, SIZE)
+        self.act = nn.ReLU(inplace=True)
 
-        nn.init.xavier_normal_(self.linear_1.weight)
-        nn.init.xavier_normal_(self.linear_2.weight)
+        nn.init.xavier_normal_(self.l_1.weight)
+        nn.init.xavier_normal_(self.l_2.weight)
 
     def forward(self, input):
-        input = self.linear_1(input)
-        input = self.activation(input)
-        input = self.linear_2(input)
-        input = self.activation(input)
+        input = self.l_1(input)
+        input = self.act(input)
+        input = self.l_2(input)
+        input = self.act(input)
 
         return input
 

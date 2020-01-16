@@ -1,4 +1,3 @@
-from tqdm import tqdm
 import utils
 from ticpfptp.metrics import Mean
 from ticpfptp.format import args_to_string
@@ -8,25 +7,27 @@ import gym
 import os
 from tensorboardX import SummaryWriter
 import torch
-from torch_rl.network import PolicyCategorical, ValueFunction
-from torch_rl.utils import generalized_advantage_estimation
-from vec_env import VecEnv
+import itertools
+from tqdm import tqdm
+from algorithms.network import PolicyCategorical, ValueFunction
+from algorithms.utils import total_return
 
 
-# TODO: revisit stat calculation
+# TODO: train/eval
+# TODO: bn update
+# TODO: return normalization
+# TODO: monitored session
 # TODO: normalize advantage?
 
 
-def build_batch(history, state_prime):
-    states, actions, rewards, dones = zip(*history)
+def build_batch(history):
+    states, actions, rewards = zip(*history)
 
     states = torch.tensor(states).transpose(0, 1).float()
     actions = torch.tensor(actions).transpose(0, 1)
     rewards = torch.tensor(rewards).transpose(0, 1).float()
-    dones = torch.tensor(np.uint8(dones)).transpose(0, 1)
-    state_prime = torch.tensor(state_prime).float()
 
-    return states, actions, rewards, dones, state_prime
+    return states, actions, rewards
 
 
 def build_optimizer(optimizer, parameters, learning_rate):
@@ -40,15 +41,13 @@ def build_optimizer(optimizer, parameters, learning_rate):
 
 def build_parser():
     parser = utils.ArgumentParser()
-    parser.add_argument('--horizon', type=int, default=256 * 8 // os.cpu_count())
     parser.add_argument('--learning-rate', type=float, default=1e-2)
     parser.add_argument('--optimizer', type=str, choices=['adam', 'momentum'], default='adam')
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/torch/a2c')
+    parser.add_argument('--experiment-path', type=str, default='./tf_log/torch/ac-mc')
     parser.add_argument('--env', type=str, required=True)
     parser.add_argument('--episodes', type=int, default=10000)
     parser.add_argument('--entropy-weight', type=float, default=1e-2)
     parser.add_argument('--gamma', type=float, default=0.99)
-    parser.add_argument('--workers', type=int, default=os.cpu_count())
     parser.add_argument('--monitor', action='store_true')
 
     return parser
@@ -59,7 +58,7 @@ def main():
     print(args_to_string(args))
     fix_seed(args.seed)
     experiment_path = os.path.join(args.experiment_path, args.env)
-    env = VecEnv([lambda: gym.make(args.env) for _ in range(args.workers)])
+    env = gym.make(args.env)
     env.seed(args.seed)
     writer = SummaryWriter(experiment_path)
 
@@ -73,51 +72,34 @@ def main():
     metrics = {'loss': Mean(), 'ep_length': Mean(), 'ep_reward': Mean()}
 
     # training
-    value_function.train()
     policy.train()
-    episode = 0
-    ep_length = np.zeros([args.workers])
-    ep_reward = np.zeros([args.workers])
-    s = env.reset()
-
-    bar = tqdm(total=args.episodes, desc='training')
-    while episode < args.episodes:
+    for episode in tqdm(range(args.episodes), desc='training'):
         history = []
+        s = env.reset()
+        ep_reward = 0
 
-        for _ in range(args.horizon):
-            a = policy(torch.tensor(s).float()).sample().data.cpu().numpy()
+        for ep_length in itertools.count():
+            a = policy(torch.tensor(s).float()).sample().item()
             s_prime, r, d, _ = env.step(a)
-            ep_length += 1
             ep_reward += r
-            history.append((s, a, r, d))
-            s = s_prime
+            history.append(([s], [a], [r]))
 
-            for i in range(args.workers):
-                if d[i]:
-                    metrics['ep_length'].update(ep_length[i])
-                    metrics['ep_reward'].update(ep_reward[i])
-                    ep_length[i] = 0
-                    ep_reward[i] = 0
-                    episode += 1
-                    bar.update(1)
+            if d:
+                break
+            else:
+                s = s_prime
 
-                    if episode % 100 == 0:
-                        for k in metrics:
-                            writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
-
-        states, actions, rewards, dones, state_prime = build_batch(history, s_prime)  # TODO: s or s_prime?
+        states, actions, rewards = build_batch(history)
 
         # critic
         values = value_function(states)
-        value_prime = value_function(state_prime).detach()
-        advantages = generalized_advantage_estimation(
-            rewards, values.detach(), value_prime, dones, gamma=args.gamma, lam=0.98)
-        returns = (advantages + values).detach()
+        returns = total_return(rewards, gamma=args.gamma)
         errors = returns - values
         critic_loss = (errors**2).mean()
 
         # actor
         dist = policy(states)
+        advantages = errors.detach()  # TODO: norm?
         actor_loss = -(dist.log_prob(actions) * advantages).mean()
         actor_loss -= args.entropy_weight * dist.entropy().mean()
 
@@ -129,9 +111,12 @@ def main():
         optimizer.step()
 
         metrics['loss'].update(loss.data.cpu().numpy())
+        metrics['ep_length'].update(ep_length)
+        metrics['ep_reward'].update(ep_reward)
 
-    bar.close()
-    env.close()
+        if episode % 100 == 0:
+            for k in metrics:
+                writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
 
 
 if __name__ == '__main__':

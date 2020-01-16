@@ -1,7 +1,6 @@
 import argparse
 import random
 import numpy as np
-import tensorflow as tf
 
 
 class EpisodeTracker(object):

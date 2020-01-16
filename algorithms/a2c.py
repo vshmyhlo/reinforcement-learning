@@ -8,8 +8,8 @@ import gym
 import os
 from tensorboardX import SummaryWriter
 import torch
-from torch_rl.network import PolicyCategorical, ValueFunction
-from torch_rl.utils import n_step_return
+from algorithms.network import PolicyCategorical, ValueFunction
+from algorithms.utils import n_step_return
 from vec_env import VecEnv
 
 
@@ -65,6 +65,7 @@ def main():
 
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
+
 
     value_function = ValueFunction(np.squeeze(env.observation_space.shape))
     policy = PolicyCategorical(np.squeeze(env.observation_space.shape), np.squeeze(env.action_space.shape))

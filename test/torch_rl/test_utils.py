@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-import torch_rl.utils as utils
+import algorithms.utils as utils
 
 
 def test_total_return():

@@ -1,16 +1,17 @@
-import utils
-from ticpfptp.metrics import Mean
-from ticpfptp.format import args_to_string
-from ticpfptp.torch import fix_seed
-import numpy as np
-import gym
-import os
-from tensorboardX import SummaryWriter
-import torch
 import itertools
+import os
+
+import gym
+import numpy as np
+import torch
+from all_the_tools.metrics import Mean
+from all_the_tools.torch.utils import seed_torch
+from tensorboardX import SummaryWriter
 from tqdm import tqdm
-from torch_rl.network import PolicyCategorical
-from torch_rl.utils import total_return
+
+import utils
+from algorithms.network import PolicyCategorical, Model
+from algorithms.utils import total_return
 
 
 # TODO: train/eval
@@ -41,12 +42,12 @@ def build_optimizer(optimizer, parameters, learning_rate):
 
 def build_parser():
     parser = utils.ArgumentParser()
-    parser.add_argument('--learning-rate', type=float, default=1e-2)
+    parser.add_argument('--learning-rate', type=float, default=1e-3)
     parser.add_argument('--optimizer', type=str, choices=['adam', 'momentum'], default='adam')
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/torch/pg-mc')
+    parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-mc')
     parser.add_argument('--env', type=str, required=True)
     parser.add_argument('--episodes', type=int, default=10000)
-    parser.add_argument('--entropy-weight', type=float, default=1e-2)
+    parser.add_argument('--entropy-weight', type=float, default=1e-3)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--monitor', action='store_true')
 
@@ -55,29 +56,36 @@ def build_parser():
 
 def main():
     args = build_parser().parse_args()
-    print(args_to_string(args))
-    fix_seed(args.seed)
+    seed_torch(args.seed)
     experiment_path = os.path.join(args.experiment_path, args.env)
     env = gym.make(args.env)
     env.seed(args.seed)
     writer = SummaryWriter(experiment_path)
 
     if args.monitor:
-        env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
+        # TODO: fix this
+        env = gym.wrappers.Monitor(env, experiment_path, force=True)
 
-    policy = PolicyCategorical(np.squeeze(env.observation_space.shape), np.squeeze(env.action_space.shape))
-    optimizer = build_optimizer(args.optimizer, policy.parameters(), args.learning_rate)
-    metrics = {'loss': Mean(), 'ep_length': Mean(), 'ep_reward': Mean()}
+    model = Model(
+        policy=PolicyCategorical(np.squeeze(env.observation_space.shape), env.action_space.n))
+    optimizer = build_optimizer(args.optimizer, model.parameters(), args.learning_rate)
 
+    metrics = {
+        'loss': Mean(),
+        'ep_length': Mean(),
+        'ep_reward': Mean(),
+    }
+
+    # ==================================================================================================================
     # training
-    policy.train()
+    model.train()
     for episode in tqdm(range(args.episodes), desc='training'):
         history = []
         s = env.reset()
         ep_reward = 0
 
         for ep_length in itertools.count():
-            a = policy(torch.tensor(s).float()).sample().item()
+            a = model.policy(torch.tensor(s).float()).sample().item()
             s_prime, r, d, _ = env.step(a)
             ep_reward += r
             history.append(([s], [a], [r]))
@@ -90,11 +98,13 @@ def main():
         states, actions, rewards = build_batch(history)
 
         # actor
-        dist = policy(states)
+        dist = model.policy(states)
         returns = total_return(rewards, gamma=args.gamma)
         advantages = returns.detach()
-        loss = -(dist.log_prob(actions) * advantages).mean()
-        loss -= args.entropy_weight * dist.entropy().mean()
+
+        loss = -(dist.log_prob(actions) * advantages)
+        loss -= args.entropy_weight * dist.entropy()
+        loss = loss.mean(1)
 
         # training
         optimizer.zero_grad()
