@@ -1,15 +1,17 @@
-import utils
-from ticpfptp.metrics import Mean
-from ticpfptp.format import args_to_string
-from ticpfptp.torch import fix_seed
-import numpy as np
-import gym
-import os
-from tensorboardX import SummaryWriter
-import torch
 import itertools
+import os
+
+import gym
+import numpy as np
+import torch
+from tensorboardX import SummaryWriter
+from ticpfptp.format import args_to_string
+from ticpfptp.metrics import Mean
+from ticpfptp.torch import fix_seed
 from tqdm import tqdm
-from algorithms.network import PolicyCategorical, ValueFunction
+
+import utils
+from algorithms.encoder import PolicyCategorical, ValueFunction
 from algorithms.utils import total_return
 
 

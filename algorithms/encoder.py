@@ -7,11 +7,12 @@ SIZE = 32
 class Model(nn.Module):
     def __init__(self, policy=None):
         super().__init__()
-       
-        self.policy = policy
+
+        if policy is not None:
+            self.policy = policy
 
 
-class Network(nn.Module):
+class Encoder(nn.Module):
     def __init__(self, in_features):
         super().__init__()
 
@@ -35,7 +36,7 @@ class ValueFunction(nn.Module):
     def __init__(self, state_size):
         super().__init__()
 
-        self.net = Network(state_size)
+        self.net = Encoder(state_size)
         self.linear = nn.Linear(SIZE, 1)
 
         nn.init.xavier_normal_(self.linear.weight)
@@ -52,7 +53,7 @@ class PolicyCategorical(nn.Module):
     def __init__(self, state_size, num_actions):
         super().__init__()
 
-        self.net = Network(state_size)
+        self.net = Encoder(state_size)
         self.dense = nn.Linear(SIZE, num_actions)
 
         nn.init.xavier_normal_(self.dense.weight)

@@ -2,6 +2,7 @@ import itertools
 import os
 
 import gym
+import gym.wrappers
 import numpy as np
 import torch
 from all_the_tools.metrics import Mean
@@ -10,14 +11,13 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import utils
-from algorithms.network import PolicyCategorical, Model
+from algorithms.encoder import PolicyCategorical, Model
 from algorithms.utils import total_return
 
 
 # TODO: train/eval
 # TODO: bn update
 # TODO: return normalization
-# TODO: monitored session
 # TODO: normalize advantage?
 
 
@@ -64,7 +64,8 @@ def main():
 
     if args.monitor:
         # TODO: fix this
-        env = gym.wrappers.Monitor(env, experiment_path, force=True)
+        # TODO: render gif
+        env = gym.wrappers.Monitor(env, './demo/{}'.format(args.env), force=True)
 
     model = Model(
         policy=PolicyCategorical(np.squeeze(env.observation_space.shape), env.action_space.n))
@@ -104,7 +105,7 @@ def main():
 
         loss = -(dist.log_prob(actions) * advantages)
         loss -= args.entropy_weight * dist.entropy()
-        loss = loss.mean(1)
+        loss = loss.mean(1)  # TODO: or sum?
 
         # training
         optimizer.zero_grad()

@@ -1,14 +1,16 @@
-from tqdm import tqdm
-import utils
-from ticpfptp.metrics import Mean
-from ticpfptp.format import args_to_string
-from ticpfptp.torch import fix_seed
-import numpy as np
-import gym
 import os
-from tensorboardX import SummaryWriter
+
+import gym
+import numpy as np
 import torch
-from algorithms.network import PolicyCategorical, ValueFunction
+from tensorboardX import SummaryWriter
+from ticpfptp.format import args_to_string
+from ticpfptp.metrics import Mean
+from ticpfptp.torch import fix_seed
+from tqdm import tqdm
+
+import utils
+from algorithms.encoder import PolicyCategorical, ValueFunction
 from algorithms.utils import n_step_return
 from vec_env import VecEnv
 
@@ -65,7 +67,6 @@ def main():
 
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
-
 
     value_function = ValueFunction(np.squeeze(env.observation_space.shape))
     policy = PolicyCategorical(np.squeeze(env.observation_space.shape), np.squeeze(env.action_space.shape))
