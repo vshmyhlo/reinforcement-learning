@@ -2,7 +2,6 @@ import itertools
 import os
 
 import gym
-import gym.wrappers
 import numpy as np
 import torch
 from all_the_tools.metrics import Mean
@@ -14,19 +13,20 @@ import utils
 from model import PolicyCategorical, Model
 from utils import total_return
 
-
 # TODO: train/eval
 # TODO: bn update
 # TODO: return normalization
 # TODO: normalize advantage?
 
+DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
 
 def build_batch(history):
     states, actions, rewards = zip(*history)
 
-    states = torch.tensor(states).transpose(0, 1).float()
-    actions = torch.tensor(actions).transpose(0, 1)
-    rewards = torch.tensor(rewards).transpose(0, 1).float()
+    states = torch.tensor(states, dtype=torch.float, device=DEVICE).transpose(0, 1)
+    actions = torch.tensor(actions, dtype=torch.long, device=DEVICE).transpose(0, 1)
+    rewards = torch.tensor(rewards, dtype=torch.float, device=DEVICE).transpose(0, 1)
 
     return states, actions, rewards
 
@@ -66,6 +66,7 @@ def main():
 
     model = Model(
         policy=PolicyCategorical(np.squeeze(env.observation_space.shape), env.action_space.n))
+    model = model.to(DEVICE)
     optimizer = build_optimizer(args.optimizer, model.parameters(), args.learning_rate)
 
     metrics = {
@@ -84,7 +85,7 @@ def main():
 
         with torch.no_grad():
             for ep_length in itertools.count():
-                a = model.policy(torch.tensor(s).float()).sample().item()
+                a = model.policy(torch.tensor(s, dtype=torch.float, device=DEVICE)).sample().item()
                 s_prime, r, d, _ = env.step(a)
                 ep_reward += r
                 history.append(([s], [a], [r]))

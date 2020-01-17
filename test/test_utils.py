@@ -1,30 +1,31 @@
-import numpy as np
 import torch
 
 import utils as utils
 
 
 def test_total_return():
-    rewards = torch.tensor([[1, 2, 3]], dtype=torch.float32)
+    rewards = torch.tensor([[1., 2., 3.]])
     actual = utils.total_return(rewards, gamma=0.9)
-    expected = [[
+
+    expected = torch.tensor([[
         1 + 0.9 * 2 + 0.9**2 * 3,
         2 + 0.9 * 3,
         3
-    ]]
+    ]])
 
-    assert np.allclose(actual, expected)
+    assert torch.allclose(actual, expected)
 
 
 def test_n_step_return():
-    rewards = torch.tensor([[1, 2, 3]]).float()
-    value_prime = torch.tensor([4]).float()
+    rewards = torch.tensor([[1., 2., 3.]])
+    value_prime = torch.tensor([4.])
     dones = torch.tensor([[False, True, False]])
     actual = utils.n_step_return(rewards, value_prime, dones, gamma=0.9)
-    expected = [[
+
+    expected = torch.tensor([[
         1 + 0.9 * 2,
         2,
         3 + 0.9 * 4
-    ]]
+    ]])
 
-    assert np.allclose(actual, expected)
+    assert torch.allclose(actual, expected)

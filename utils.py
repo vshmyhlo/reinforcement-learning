@@ -3,11 +3,10 @@ import argparse
 import torch
 
 
-# TODO: test
 def total_return(rewards, gamma):
-    value_prime = torch.zeros(rewards.size(0))
-    dones = torch.full_like(rewards, False)
-
+    value_prime = torch.zeros(rewards.size(0), dtype=rewards.dtype, device=rewards.device)
+    dones = torch.full_like(rewards, False, dtype=torch.bool, device=rewards.device)
+   
     return n_step_return(rewards, value_prime, dones, gamma)
 
 
@@ -16,7 +15,7 @@ def n_step_return(rewards, value_prime, dones, gamma):
     assert value_prime.dim() == 1
     assert rewards.size(1) == dones.size(1)
 
-    masks = (1 - dones).float()
+    masks = (~dones).float()
     ret = value_prime
     returns = torch.zeros_like(rewards)
 

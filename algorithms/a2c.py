@@ -14,6 +14,8 @@ from model import PolicyCategorical, ValueFunction
 from utils import n_step_return
 from vec_env import VecEnv
 
+DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
 
 # TODO: revisit stat calculation
 # TODO: normalize advantage?
@@ -22,11 +24,11 @@ from vec_env import VecEnv
 def build_batch(history, state_prime):
     states, actions, rewards, dones = zip(*history)
 
-    states = torch.tensor(states).transpose(0, 1).float()
-    actions = torch.tensor(actions).transpose(0, 1)
-    rewards = torch.tensor(rewards).transpose(0, 1).float()
-    dones = torch.tensor(np.uint8(dones)).transpose(0, 1)
-    state_prime = torch.tensor(state_prime).float()
+    states = torch.tensor(states, dtype=torch.float, device=DEVICE).transpose(0, 1)
+    actions = torch.tensor(actions, dtype=torch.long, device=DEVICE).transpose(0, 1)
+    rewards = torch.tensor(rewards, dtype=torch.float, device=DEVICE).transpose(0, 1)
+    dones = torch.tensor(dones, dtype=torch.bool, device=DEVICE).transpose(0, 1)
+    state_prime = torch.tensor(state_prime, dtype=torch.float, device=DEVICE)
 
     return states, actions, rewards, dones, state_prime
 
@@ -69,6 +71,7 @@ def main():
     model = Model(
         policy=PolicyCategorical(np.squeeze(env.observation_space.shape), env.action_space.n),
         value_function=ValueFunction(np.squeeze(env.observation_space.shape)))
+    model = model.to(DEVICE)
     optimizer = build_optimizer(args.optimizer, model.parameters(), args.learning_rate)
 
     metrics = {
@@ -90,7 +93,7 @@ def main():
         history = []
 
         for _ in range(args.horizon):
-            a = model.policy(torch.tensor(s).float()).sample().data.cpu().numpy()
+            a = model.policy(torch.tensor(s, device=DEVICE).float()).sample().data.cpu().numpy()
             s_prime, r, d, _ = env.step(a)
             ep_length += 1
             ep_reward += r
@@ -111,7 +114,7 @@ def main():
                             writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
 
         states, actions, rewards, dones, state_prime = build_batch(history, s_prime)  # TODO: s or s_prime?
-
+       
         # critic
         values = model.value_function(states)
         value_prime = model.value_function(state_prime).detach()
