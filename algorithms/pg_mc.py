@@ -11,7 +11,7 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import utils
-from algorithms.encoder import PolicyCategorical, Model
+from algorithms.model import PolicyCategorical, Model
 from algorithms.utils import total_return
 
 
@@ -57,15 +57,12 @@ def build_parser():
 def main():
     args = build_parser().parse_args()
     seed_torch(args.seed)
-    experiment_path = os.path.join(args.experiment_path, args.env)
     env = gym.make(args.env)
     env.seed(args.seed)
-    writer = SummaryWriter(experiment_path)
+    writer = SummaryWriter(args.experiment_path)
 
     if args.monitor:
-        # TODO: fix this
-        # TODO: render gif
-        env = gym.wrappers.Monitor(env, './demo/{}'.format(args.env), force=True)
+        env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
 
     model = Model(
         policy=PolicyCategorical(np.squeeze(env.observation_space.shape), env.action_space.n))
@@ -78,23 +75,24 @@ def main():
     }
 
     # ==================================================================================================================
-    # training
+    # training loop
     model.train()
     for episode in tqdm(range(args.episodes), desc='training'):
         history = []
         s = env.reset()
         ep_reward = 0
 
-        for ep_length in itertools.count():
-            a = model.policy(torch.tensor(s).float()).sample().item()
-            s_prime, r, d, _ = env.step(a)
-            ep_reward += r
-            history.append(([s], [a], [r]))
+        with torch.no_grad():
+            for ep_length in itertools.count():
+                a = model.policy(torch.tensor(s).float()).sample().item()
+                s_prime, r, d, _ = env.step(a)
+                ep_reward += r
+                history.append(([s], [a], [r]))
 
-            if d:
-                break
-            else:
-                s = s_prime
+                if d:
+                    break
+                else:
+                    s = s_prime
 
         states, actions, rewards = build_batch(history)
 

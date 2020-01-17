@@ -10,7 +10,7 @@ from ticpfptp.torch import fix_seed
 from tqdm import tqdm
 
 import utils
-from algorithms.encoder import PolicyCategorical, ValueFunction
+from algorithms.model import PolicyCategorical, ValueFunction
 from algorithms.utils import n_step_return
 from vec_env import VecEnv
 

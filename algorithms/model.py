@@ -5,11 +5,13 @@ SIZE = 32
 
 
 class Model(nn.Module):
-    def __init__(self, policy=None):
+    def __init__(self, policy=None, value_function=None):
         super().__init__()
 
         if policy is not None:
             self.policy = policy
+        if value_function is not None:
+            self.value_function = value_function
 
 
 class Encoder(nn.Module):
@@ -64,31 +66,3 @@ class PolicyCategorical(nn.Module):
         dist = torch.distributions.Categorical(logits=input)
 
         return dist
-
-# class PolicyNormal(tf.layers.Layer):
-#     def __init__(self,
-#                  num_actions,
-#                  trainable=True,
-#                  name='policy_categorical'):
-#         super().__init__(name=name)
-#
-#         kernel_initializer = tf.contrib.layers.variance_scaling_initializer(
-#             factor=2.0, mode='FAN_IN', uniform=False)
-#         kernel_regularizer = tf.contrib.layers.l2_regularizer(scale=1e-4)
-#
-#         self.net = Network(trainable=trainable)
-#         self.dense = tf.layers.Dense(
-#             num_actions * 2,
-#             kernel_initializer=kernel_initializer,
-#             kernel_regularizer=kernel_regularizer,
-#             trainable=trainable)
-#
-#     def call(self, input, training):
-#         input = self.net(input, training=training)
-#         input = self.dense(input)
-#
-#         mu, sigma = tf.split(input, 2, -1)
-#         sigma = tf.nn.softplus(sigma) + 1e-5
-#         dist = tf.distributions.Normal(mu, sigma)
-#
-#         return dist
