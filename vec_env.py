@@ -3,16 +3,13 @@ from multiprocessing import Pipe, Process
 
 import numpy as np
 
-# TODO: refactor
-# def __enter__(self)
-# def __exit__(self, exc_type, exc_value, traceback)
-
-Command = Enum('Command', ['RESET', 'STEP', 'CLOSE', 'GET_SPACES', 'SEED'])
-
-
-def env_step(a):
-    env, action = a
-    return env.step(action)
+Command = Enum('Command', [
+    'RESET',
+    'STEP',
+    'CLOSE',
+    'GET_SPACES',
+    'SEED'
+])
 
 
 def worker(env_fn, conn):
@@ -84,7 +81,7 @@ class VecEnv(object):
 
     def seed(self, seed):
         for i, conn in enumerate(self.conns):
-            conn.send((Command.SEED, seed**i))
+            conn.send((Command.SEED, seed + i))
 
         for conn in self.conns:
             conn.recv()

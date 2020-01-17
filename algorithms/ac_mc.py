@@ -106,7 +106,7 @@ def main():
 
         # actor
         dist = model.policy(states)
-        advantages = errors.detach()  # TODO: norm?
+        advantages = errors.detach()
         actor_loss = -(dist.log_prob(actions) * advantages)
         actor_loss -= args.entropy_weight * dist.entropy()
 

@@ -3,9 +3,9 @@ import os
 import gym
 import numpy as np
 import torch
+from all_the_tools.metrics import Mean
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
-from ticpfptp.metrics import Mean
 from tqdm import tqdm
 
 import utils
@@ -117,19 +117,19 @@ def main():
         value_prime = model.value_function(state_prime).detach()
         returns = n_step_return(rewards, value_prime, dones, gamma=args.gamma)
         errors = returns - values
-        critic_loss = (errors**2).mean()
+        critic_loss = errors**2
 
         # actor
         dist = model.policy(states)
-        advantages = errors.detach()  # TODO: normalize?
-        actor_loss = -(dist.log_prob(actions) * advantages).mean()
-        actor_loss -= args.entropy_weight * dist.entropy().mean()
+        advantages = errors.detach()
+        actor_loss = -(dist.log_prob(actions) * advantages)
+        actor_loss -= args.entropy_weight * dist.entropy()
+
+        loss = (actor_loss + critic_loss).mean(1)
 
         # training
-        loss = actor_loss + critic_loss
-
         optimizer.zero_grad()
-        loss.backward()
+        loss.mean().backward()
         optimizer.step()
 
         metrics['loss'].update(loss.data.cpu().numpy())
