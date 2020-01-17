@@ -102,19 +102,19 @@ def main():
         values = model.value_function(states)
         returns = total_return(rewards, gamma=args.gamma)
         errors = returns - values
-        critic_loss = (errors**2).mean()
+        critic_loss = errors**2
 
         # actor
         dist = model.policy(states)
         advantages = errors.detach()  # TODO: norm?
-        actor_loss = -(dist.log_prob(actions) * advantages).mean()
-        actor_loss -= args.entropy_weight * dist.entropy().mean()
+        actor_loss = -(dist.log_prob(actions) * advantages)
+        actor_loss -= args.entropy_weight * dist.entropy()
+
+        loss = (actor_loss + critic_loss).mean(1)
 
         # training
-        loss = actor_loss + critic_loss
-
         optimizer.zero_grad()
-        loss.backward()
+        loss.mean().backward()
         optimizer.step()
 
         metrics['loss'].update(loss.data.cpu().numpy())

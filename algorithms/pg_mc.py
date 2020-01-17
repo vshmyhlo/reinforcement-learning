@@ -100,14 +100,14 @@ def main():
         dist = model.policy(states)
         returns = total_return(rewards, gamma=args.gamma)
         advantages = returns.detach()
-
-        loss = -(dist.log_prob(actions) * advantages)
-        loss -= args.entropy_weight * dist.entropy()
-        loss = loss.mean(1)  # TODO: or sum?
+        actor_loss = -(dist.log_prob(actions) * advantages)
+        actor_loss -= args.entropy_weight * dist.entropy()
+       
+        loss = actor_loss.mean(1)  # TODO: or sum?
 
         # training
         optimizer.zero_grad()
-        loss.backward()
+        loss.mean().backward()
         optimizer.step()
 
         metrics['loss'].update(loss.data.cpu().numpy())

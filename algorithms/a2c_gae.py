@@ -42,7 +42,7 @@ def build_optimizer(optimizer, parameters, learning_rate):
 
 def build_parser():
     parser = utils.ArgumentParser()
-    parser.add_argument('--horizon', type=int, default=256 * 8 // os.cpu_count())
+    parser.add_argument('--horizon', type=int, default=32)
     parser.add_argument('--learning-rate', type=float, default=1e-2)
     parser.add_argument('--optimizer', type=str, choices=['adam', 'momentum'], default='adam')
     parser.add_argument('--experiment-path', type=str, default='./tf_log/torch/a2c')
