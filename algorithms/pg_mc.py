@@ -11,8 +11,8 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import utils
-from algorithms.model import PolicyCategorical, Model
-from algorithms.utils import total_return
+from model import PolicyCategorical, Model
+from utils import total_return
 
 
 # TODO: train/eval
@@ -102,7 +102,7 @@ def main():
         advantages = returns.detach()
         actor_loss = -(dist.log_prob(actions) * advantages)
         actor_loss -= args.entropy_weight * dist.entropy()
-       
+
         loss = actor_loss.mean(1)  # TODO: or sum?
 
         # training

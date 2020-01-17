@@ -10,9 +10,9 @@ from ticpfptp.metrics import Mean
 from tqdm import tqdm
 
 import utils
-from algorithms.model import Model
-from algorithms.model import PolicyCategorical, ValueFunction
-from algorithms.utils import total_return
+from model import Model
+from model import PolicyCategorical, ValueFunction
+from utils import total_return
 
 
 # TODO: train/eval

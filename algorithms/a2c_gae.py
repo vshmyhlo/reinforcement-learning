@@ -10,8 +10,8 @@ from ticpfptp.torch import fix_seed
 from tqdm import tqdm
 
 import utils
-from algorithms.model import PolicyCategorical, ValueFunction
-from algorithms.utils import generalized_advantage_estimation
+from model import PolicyCategorical, ValueFunction
+from utils import generalized_advantage_estimation
 from vec_env import VecEnv
 
 

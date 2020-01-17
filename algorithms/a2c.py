@@ -9,9 +9,9 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import utils
-from algorithms.model import Model
-from algorithms.model import PolicyCategorical, ValueFunction
-from algorithms.utils import n_step_return
+from model import Model
+from model import PolicyCategorical, ValueFunction
+from utils import n_step_return
 from vec_env import VecEnv
 
 
