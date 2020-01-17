@@ -1,6 +1,7 @@
-from multiprocessing import Pipe, Process
-import numpy as np
 from enum import Enum
+from multiprocessing import Pipe, Process
+
+import numpy as np
 
 # TODO: refactor
 # def __enter__(self)
@@ -50,10 +51,7 @@ class VecEnv(object):
             process.start()
 
         self.conns[0].send((Command.GET_SPACES,))
-        observation_space, action_space = self.conns[0].recv()
-
-        self.observation_space = VecObservationSpace(observation_space=observation_space)
-        self.action_space = VecActionSpace(size=len(env_fns), action_space=action_space)
+        self.observation_space, self.action_space = self.conns[0].recv()
 
     def reset(self):
         for conn in self.conns:
@@ -90,26 +88,3 @@ class VecEnv(object):
 
         for conn in self.conns:
             conn.recv()
-
-
-class VecActionSpace(object):
-    def __init__(self, size, action_space):
-        self.size = size
-        self.action_space = action_space
-        self.shape = action_space.shape
-
-    def sample(self):
-        return np.array([self.action_space.sample() for _ in range(self.size)])
-
-    @property
-    def low(self):
-        return self.action_space.low
-
-    @property
-    def high(self):
-        return self.action_space.high
-
-
-class VecObservationSpace(object):
-    def __init__(self, observation_space):
-        self.shape = observation_space.shape

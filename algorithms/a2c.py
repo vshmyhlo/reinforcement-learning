@@ -3,13 +3,13 @@ import os
 import gym
 import numpy as np
 import torch
+from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
-from ticpfptp.format import args_to_string
 from ticpfptp.metrics import Mean
-from ticpfptp.torch import fix_seed
 from tqdm import tqdm
 
 import utils
+from algorithms.model import Model
 from algorithms.model import PolicyCategorical, ValueFunction
 from algorithms.utils import n_step_return
 from vec_env import VecEnv
@@ -45,7 +45,7 @@ def build_parser():
     parser.add_argument('--horizon', type=int, default=32)
     parser.add_argument('--learning-rate', type=float, default=1e-3)
     parser.add_argument('--optimizer', type=str, choices=['adam', 'momentum'], default='adam')
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/torch/a2c')
+    parser.add_argument('--experiment-path', type=str, default='./tf_log/a2c')
     parser.add_argument('--env', type=str, required=True)
     parser.add_argument('--episodes', type=int, default=10000)
     parser.add_argument('--entropy-weight', type=float, default=1e-3)
@@ -58,25 +58,28 @@ def build_parser():
 
 def main():
     args = build_parser().parse_args()
-    print(args_to_string(args))
-    fix_seed(args.seed)
-    experiment_path = os.path.join(args.experiment_path, args.env)
+    seed_torch(args.seed)
     env = VecEnv([lambda: gym.make(args.env) for _ in range(args.workers)])
     env.seed(args.seed)
-    writer = SummaryWriter(experiment_path)
+    writer = SummaryWriter(args.experiment_path)
 
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
 
-    value_function = ValueFunction(np.squeeze(env.observation_space.shape))
-    policy = PolicyCategorical(np.squeeze(env.observation_space.shape), np.squeeze(env.action_space.shape))
-    optimizer = build_optimizer(
-        args.optimizer, list(value_function.parameters()) + list(policy.parameters()), args.learning_rate)
-    metrics = {'loss': Mean(), 'ep_length': Mean(), 'ep_reward': Mean()}
+    model = Model(
+        policy=PolicyCategorical(np.squeeze(env.observation_space.shape), env.action_space.n),
+        value_function=ValueFunction(np.squeeze(env.observation_space.shape)))
+    optimizer = build_optimizer(args.optimizer, model.parameters(), args.learning_rate)
 
-    # training
-    value_function.train()
-    policy.train()
+    metrics = {
+        'loss': Mean(),
+        'ep_length': Mean(),
+        'ep_reward': Mean(),
+    }
+
+    # ==================================================================================================================
+    # training loop
+    model.train()
     episode = 0
     ep_length = np.zeros([args.workers])
     ep_reward = np.zeros([args.workers])
@@ -87,7 +90,7 @@ def main():
         history = []
 
         for _ in range(args.horizon):
-            a = policy(torch.tensor(s).float()).sample().data.cpu().numpy()
+            a = model.policy(torch.tensor(s).float()).sample().data.cpu().numpy()
             s_prime, r, d, _ = env.step(a)
             ep_length += 1
             ep_reward += r
@@ -110,14 +113,14 @@ def main():
         states, actions, rewards, dones, state_prime = build_batch(history, s_prime)  # TODO: s or s_prime?
 
         # critic
-        values = value_function(states)
-        value_prime = value_function(state_prime).detach()
+        values = model.value_function(states)
+        value_prime = model.value_function(state_prime).detach()
         returns = n_step_return(rewards, value_prime, dones, gamma=args.gamma)
         errors = returns - values
         critic_loss = (errors**2).mean()
 
         # actor
-        dist = policy(states)
+        dist = model.policy(states)
         advantages = errors.detach()  # TODO: normalize?
         actor_loss = -(dist.log_prob(actions) * advantages).mean()
         actor_loss -= args.entropy_weight * dist.entropy().mean()
