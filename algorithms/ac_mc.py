@@ -4,14 +4,13 @@ import os
 import gym
 import numpy as np
 import torch
+from all_the_tools.metrics import Mean
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
-from ticpfptp.metrics import Mean
 from tqdm import tqdm
 
 import utils
-from model import Model
-from model import PolicyCategorical, ValueFunction
+from model import Model, PolicyCategorical, ValueFunction
 from utils import total_return
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
