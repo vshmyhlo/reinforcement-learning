@@ -3,14 +3,14 @@ import argparse
 import torch
 
 
-def total_return(rewards, gamma):
+def total_discounted_return(rewards, gamma):
     value_prime = torch.zeros(rewards.size(0), dtype=rewards.dtype, device=rewards.device)
     dones = torch.full_like(rewards, False, dtype=torch.bool, device=rewards.device)
-   
-    return n_step_return(rewards, value_prime, dones, gamma)
+
+    return n_step_discounted_return(rewards, value_prime, dones, gamma)
 
 
-def n_step_return(rewards, value_prime, dones, gamma):
+def n_step_discounted_return(rewards, value_prime, dones, gamma):
     assert rewards.dim() == dones.dim() == 2
     assert value_prime.dim() == 1
     assert rewards.size(1) == dones.size(1)

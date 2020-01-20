@@ -3,21 +3,27 @@ import os
 import gym
 import numpy as np
 import torch
+import torch.optim
+import torch.optim
 from all_the_tools.metrics import Mean
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import utils
+from algorithms.common import build_optimizer
 from model import Model
 from model import PolicyCategorical, ValueFunction
-from utils import n_step_return
+from utils import n_step_discounted_return
 from vec_env import VecEnv
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
+# TODO: finite horizon undiscounted
+# TODO: torch wrapper
 # TODO: revisit stat calculation
+# TODO: shared weights
 # TODO: normalize advantage?
 
 
@@ -33,26 +39,17 @@ def build_batch(history, state_prime):
     return states, actions, rewards, dones, state_prime
 
 
-def build_optimizer(optimizer, parameters, learning_rate):
-    if optimizer == 'adam':
-        return torch.optim.Adam(parameters, learning_rate, weight_decay=1e-4)
-    elif optimizer == 'momentum':
-        return torch.optim.SGD(parameters, learning_rate, momentum=0.9, weight_decay=1e-4)
-    else:
-        raise AssertionError('invalid optimizer {}'.format(optimizer))
-
-
 def build_parser():
     parser = utils.ArgumentParser()
-    parser.add_argument('--horizon', type=int, default=32)
+    parser.add_argument('--horizon', type=int, default=8)
     parser.add_argument('--learning-rate', type=float, default=1e-3)
-    parser.add_argument('--optimizer', type=str, choices=['adam', 'momentum'], default='adam')
+    parser.add_argument('--optimizer', type=str, choices=['momentum', 'rmsprop', 'adam'], default='adam')
     parser.add_argument('--experiment-path', type=str, default='./tf_log/a2c')
     parser.add_argument('--env', type=str, required=True)
     parser.add_argument('--episodes', type=int, default=10000)
     parser.add_argument('--entropy-weight', type=float, default=1e-3)
     parser.add_argument('--gamma', type=float, default=0.99)
-    parser.add_argument('--workers', type=int, default=os.cpu_count())
+    parser.add_argument('--workers', type=int, default=32)
     parser.add_argument('--monitor', action='store_true')
 
     return parser
@@ -100,25 +97,25 @@ def main():
             history.append((s, a, r, d))
             s = s_prime
 
-            for i in range(args.workers):
-                if d[i]:
-                    metrics['ep_length'].update(ep_length[i])
-                    metrics['ep_reward'].update(ep_reward[i])
-                    ep_length[i] = 0
-                    ep_reward[i] = 0
-                    episode += 1
-                    bar.update(1)
+            indices, = np.where(d)
+            for i in indices:
+                metrics['ep_length'].update(ep_length[i])
+                metrics['ep_reward'].update(ep_reward[i])
+                ep_length[i] = 0
+                ep_reward[i] = 0
+                episode += 1
+                bar.update(1)
 
-                    if episode % 100 == 0:
-                        for k in metrics:
-                            writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
+                if episode % 100 == 0:
+                    for k in metrics:
+                        writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
 
         states, actions, rewards, dones, state_prime = build_batch(history, s_prime)  # TODO: s or s_prime?
-       
+
         # critic
         values = model.value_function(states)
         value_prime = model.value_function(state_prime).detach()
-        returns = n_step_return(rewards, value_prime, dones, gamma=args.gamma)
+        returns = n_step_discounted_return(rewards, value_prime, dones, gamma=args.gamma)
         errors = returns - values
         critic_loss = errors**2
 
@@ -128,7 +125,7 @@ def main():
         actor_loss = -(dist.log_prob(actions) * advantages)
         actor_loss -= args.entropy_weight * dist.entropy()
 
-        loss = (actor_loss + critic_loss).mean(1)
+        loss = (actor_loss + critic_loss).sum(1)
 
         # training
         optimizer.zero_grad()

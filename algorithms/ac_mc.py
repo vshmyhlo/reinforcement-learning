@@ -10,11 +10,13 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import utils
+from algorithms.common import build_optimizer
 from model import Model, PolicyCategorical, ValueFunction
-from utils import total_return
+from utils import total_discounted_return
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
+# TODO: normalize advantage
 # TODO: train/eval
 # TODO: bn update
 # TODO: return normalization
@@ -34,19 +36,10 @@ def build_batch(history):
     return states, actions, rewards
 
 
-def build_optimizer(optimizer, parameters, learning_rate):
-    if optimizer == 'adam':
-        return torch.optim.Adam(parameters, learning_rate, weight_decay=1e-4)
-    elif optimizer == 'momentum':
-        return torch.optim.SGD(parameters, learning_rate, momentum=0.9, weight_decay=1e-4)
-    else:
-        raise AssertionError('invalid optimizer {}'.format(optimizer))
-
-
 def build_parser():
     parser = utils.ArgumentParser()
     parser.add_argument('--learning-rate', type=float, default=1e-3)
-    parser.add_argument('--optimizer', type=str, choices=['adam', 'momentum'], default='adam')
+    parser.add_argument('--optimizer', type=str, choices=['momentum', 'rmsprop', 'adam'], default='adam')
     parser.add_argument('--experiment-path', type=str, default='./tf_log/ac-mc')
     parser.add_argument('--env', type=str, required=True)
     parser.add_argument('--episodes', type=int, default=10000)
@@ -103,7 +96,7 @@ def main():
 
         # critic
         values = model.value_function(states)
-        returns = total_return(rewards, gamma=args.gamma)
+        returns = total_discounted_return(rewards, gamma=args.gamma)
         errors = returns - values
         critic_loss = errors**2
 
@@ -113,7 +106,7 @@ def main():
         actor_loss = -(dist.log_prob(actions) * advantages)
         actor_loss -= args.entropy_weight * dist.entropy()
 
-        loss = (actor_loss + critic_loss).mean(1)
+        loss = (actor_loss + critic_loss).sum(1)
 
         # training
         optimizer.zero_grad()
