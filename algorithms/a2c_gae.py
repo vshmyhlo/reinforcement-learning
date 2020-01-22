@@ -107,7 +107,7 @@ def main():
                         for k in metrics:
                             writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
 
-        states, actions, rewards, dones, state_prime = build_batch(history, s_prime)  # TODO: s or s_prime?
+        states, actions, rewards, dones, state_prime = build_batch(history, s_prime)
 
         # critic
         values = value_function(states)

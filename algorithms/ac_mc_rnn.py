@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 import utils
 from algorithms.common import build_optimizer
-from model import Model
+from model import ModelRNN
 from utils import total_discounted_return
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -39,7 +39,7 @@ def build_parser():
     parser = utils.ArgumentParser()
     parser.add_argument('--learning-rate', type=float, default=1e-3)
     parser.add_argument('--optimizer', type=str, choices=['momentum', 'rmsprop', 'adam'], default='adam')
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/ac-mc')
+    parser.add_argument('--experiment-path', type=str, default='./tf_log/ac-mc-rnn')
     parser.add_argument('--env', type=str, required=True)
     parser.add_argument('--episodes', type=int, default=10000)
     parser.add_argument('--entropy-weight', type=float, default=1e-3)
@@ -59,7 +59,7 @@ def main():
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
 
-    model = Model(np.squeeze(env.observation_space.shape), env.action_space.n)
+    model = ModelRNN(np.squeeze(env.observation_space.shape), env.action_space.n)
     model = model.to(DEVICE)
     optimizer = build_optimizer(args.optimizer, model.parameters(), args.learning_rate)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.episodes)
@@ -76,11 +76,13 @@ def main():
     for episode in tqdm(range(args.episodes), desc='training'):
         history = []
         s = env.reset()
+        h = None
         ep_reward = 0
 
         with torch.no_grad():
             for ep_length in itertools.count():
-                a = model.policy(torch.tensor(s, dtype=torch.float, device=DEVICE)).sample().item()
+                a, h = model.policy(torch.tensor(s, dtype=torch.float, device=DEVICE), h)
+                a = a.sample().item()
                 s_prime, r, d, _ = env.step(a)
                 ep_reward += r
                 history.append(([s], [a], [r]))
@@ -93,13 +95,13 @@ def main():
         states, actions, rewards = build_batch(history)
 
         # critic
-        values = model.value_function(states)
+        values, _ = model.value_function(states, None)
         returns = total_discounted_return(rewards, gamma=args.gamma)
         errors = returns - values
         critic_loss = errors**2
 
         # actor
-        dist = model.policy(states)
+        dist, _ = model.policy(states, None)
         advantages = errors.detach()
         actor_loss = -(dist.log_prob(actions) * advantages)
         actor_loss -= args.entropy_weight * dist.entropy()

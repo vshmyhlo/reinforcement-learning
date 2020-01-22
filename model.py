@@ -4,65 +4,108 @@ import torch.nn as nn
 SIZE = 32
 
 
+class Activation(nn.PReLU):
+    pass
+
+
 class Model(nn.Module):
-    def __init__(self, policy=None, value_function=None):
+    def __init__(self, state_size, num_actions):
         super().__init__()
 
-        if policy is not None:
-            self.policy = policy
-        if value_function is not None:
-            self.value_function = value_function
+        self.policy = nn.Sequential(
+            Embedder(state_size),
+            PolicyCategorical(num_actions))
+
+        self.value_function = nn.Sequential(
+            Embedder(state_size),
+            ValueFunction())
 
 
-class Encoder(nn.Module):
+class ModelRNN(nn.Module):
+    def __init__(self, state_size, num_actions):
+        super().__init__()
+
+        self.policy_embedder = EmbedderRNN(state_size)
+        self.policy_module = PolicyCategorical(num_actions)
+       
+        self.value_function_embedder = EmbedderRNN(state_size)
+        self.value_function_module = ValueFunction()
+
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_normal_(m.weight)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+    def policy(self, input, hidden):
+        input, hidden = self.policy_embedder(input, hidden)
+        input = self.policy_module(input)
+
+        return input, hidden
+
+    def value_function(self, input, hidden):
+        input, hidden = self.value_function_embedder(input, hidden)
+        input = self.value_function_module(input)
+
+        return input, hidden
+
+
+class EmbedderRNN(nn.Module):
     def __init__(self, in_features):
         super().__init__()
 
-        self.l_1 = nn.Linear(in_features, SIZE)
-        self.l_2 = nn.Linear(SIZE, SIZE)
-        self.act = nn.ReLU(inplace=True)
+        self.rnn = nn.LSTM(in_features, SIZE, batch_first=True, bidirectional=False)
 
-        nn.init.xavier_normal_(self.l_1.weight)
-        nn.init.xavier_normal_(self.l_2.weight)
+    def forward(self, input, hidden):
+        dim = input.dim()
+
+        if dim == 1:
+            input = input.view(1, 1, input.size(0))
+
+        assert input.dim() == 3
+        input, hidden = self.rnn(input, hidden)
+
+        if dim == 1:
+            input = input.view(input.size(2))
+
+        return input, hidden
+
+
+class Embedder(nn.Module):
+    def __init__(self, in_features):
+        super().__init__()
+
+        self.linear = nn.Linear(in_features, SIZE)
+        self.act = Activation()
 
     def forward(self, input):
-        input = self.l_1(input)
-        input = self.act(input)
-        input = self.l_2(input)
+        input = self.linear(input)
         input = self.act(input)
 
         return input
 
 
-class ValueFunction(nn.Module):
-    def __init__(self, state_size):
+class ValueFunction(nn.Sequential):
+    def __init__(self):
         super().__init__()
 
-        self.net = Encoder(state_size)
-        self.linear = nn.Linear(SIZE, 1)
-
-        nn.init.xavier_normal_(self.linear.weight)
+        self.layers = nn.Linear(SIZE, 1)
 
     def forward(self, input):
-        input = self.net(input)
-        input = self.linear(input)
+        input = self.layers(input)
         input = input.squeeze(-1)
 
         return input
 
 
 class PolicyCategorical(nn.Module):
-    def __init__(self, state_size, num_actions):
+    def __init__(self, num_actions):
         super().__init__()
 
-        self.net = Encoder(state_size)
-        self.dense = nn.Linear(SIZE, num_actions)
-
-        nn.init.xavier_normal_(self.dense.weight)
+        self.layers = nn.Linear(SIZE, num_actions)
 
     def forward(self, input):
-        input = self.net(input)
-        input = self.dense(input)
+        input = self.layers(input)
         dist = torch.distributions.Categorical(logits=input)
 
         return dist

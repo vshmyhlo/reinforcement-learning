@@ -2,6 +2,7 @@ import itertools
 import os
 
 import gym
+import gym.wrappers
 import numpy as np
 import torch
 from all_the_tools.metrics import Mean
@@ -11,7 +12,7 @@ from tqdm import tqdm
 
 import utils
 from algorithms.common import build_optimizer
-from model import PolicyCategorical, Model
+from model import Model
 from utils import total_discounted_return
 
 # TODO: train/eval
@@ -56,10 +57,10 @@ def main():
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
 
-    model = Model(
-        policy=PolicyCategorical(np.squeeze(env.observation_space.shape), env.action_space.n))
+    model = Model(np.squeeze(env.observation_space.shape), env.action_space.n)
     model = model.to(DEVICE)
     optimizer = build_optimizer(args.optimizer, model.parameters(), args.learning_rate)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.episodes)
 
     metrics = {
         'loss': Mean(),
@@ -102,6 +103,7 @@ def main():
         optimizer.zero_grad()
         loss.mean().backward()
         optimizer.step()
+        scheduler.step()
 
         metrics['loss'].update(loss.data.cpu().numpy())
         metrics['ep_length'].update(ep_length)
@@ -110,6 +112,8 @@ def main():
         if episode % 100 == 0:
             for k in metrics:
                 writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
+            writer.add_histogram('return', returns, global_step=episode)
+            writer.add_histogram('advantage', advantages, global_step=episode)
 
 
 if __name__ == '__main__':
