@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.optim
 import torch.optim
-from all_the_tools.metrics import Mean
+from all_the_tools.metrics import Mean, Last
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -13,7 +13,6 @@ from tqdm import tqdm
 import utils
 from algorithms.common import build_optimizer
 from model import Model
-from model import PolicyCategorical, ValueFunction
 from utils import n_step_discounted_return
 from vec_env import VecEnv
 
@@ -65,14 +64,14 @@ def main():
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
 
-    model = Model(
-        policy=PolicyCategorical(np.squeeze(env.observation_space.shape), env.action_space.n),
-        value_function=ValueFunction(np.squeeze(env.observation_space.shape)))
+    model = Model(np.squeeze(env.observation_space.shape), env.action_space.n)
     model = model.to(DEVICE)
     optimizer = build_optimizer(args.optimizer, model.parameters(), args.learning_rate)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.episodes)
 
     metrics = {
         'loss': Mean(),
+        'lr': Last(),
         'ep_length': Mean(),
         'ep_reward': Mean(),
     }
@@ -90,7 +89,7 @@ def main():
         history = []
 
         for _ in range(args.horizon):
-            a = model.policy(torch.tensor(s, device=DEVICE).float()).sample().data.cpu().numpy()
+            a = model.policy(torch.tensor(s, dtype=torch.float, device=DEVICE)).sample().data.cpu().numpy()
             s_prime, r, d, _ = env.step(a)
             ep_length += 1
             ep_reward += r
@@ -104,11 +103,15 @@ def main():
                 ep_length[i] = 0
                 ep_reward[i] = 0
                 episode += 1
+                scheduler.step()
                 bar.update(1)
 
                 if episode % 100 == 0:
                     for k in metrics:
                         writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
+                    writer.add_histogram('return', returns, global_step=episode)
+                    writer.add_histogram('value', values, global_step=episode)
+                    writer.add_histogram('advantage', advantages, global_step=episode)
 
         states, actions, rewards, dones, state_prime = build_batch(history, s_prime)  # TODO: s or s_prime?
 
@@ -127,12 +130,13 @@ def main():
 
         loss = (actor_loss + critic_loss).sum(1)
 
+        metrics['loss'].update(loss.data.cpu().numpy())
+        metrics['lr'].update(np.squeeze(scheduler.get_lr()))
+
         # training
         optimizer.zero_grad()
         loss.mean().backward()
         optimizer.step()
-
-        metrics['loss'].update(loss.data.cpu().numpy())
 
     bar.close()
     env.close()

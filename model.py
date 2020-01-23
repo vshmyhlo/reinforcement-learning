@@ -27,7 +27,7 @@ class ModelRNN(nn.Module):
 
         self.policy_embedder = EmbedderRNN(state_size)
         self.policy_module = PolicyCategorical(num_actions)
-       
+
         self.value_function_embedder = EmbedderRNN(state_size)
         self.value_function_module = ValueFunction()
 
@@ -61,12 +61,16 @@ class EmbedderRNN(nn.Module):
 
         if dim == 1:
             input = input.view(1, 1, input.size(0))
+        elif dim == 2:
+            input = input.unsqueeze(1)
 
         assert input.dim() == 3
         input, hidden = self.rnn(input, hidden)
 
         if dim == 1:
             input = input.view(input.size(2))
+        elif dim == 2:
+            input = input.squeeze(1)
 
         return input, hidden
 
