@@ -11,7 +11,9 @@ def build_default_config():
     config.transform = 'noop'
     config.gamma = 0.99
     config.entropy_weight = 1e-2
-
+    config.horizon = 8
+    config.workers = 32
+   
     config.model = CN()
     config.model.size = 32
 
