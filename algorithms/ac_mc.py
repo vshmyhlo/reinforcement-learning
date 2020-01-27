@@ -5,7 +5,7 @@ import gym
 import gym.wrappers
 import numpy as np
 import torch
-from all_the_tools.metrics import Mean, Last
+from all_the_tools.metrics import Mean, Last, FPS
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -75,6 +75,7 @@ def main():
     metrics = {
         'loss': Mean(),
         'lr': Last(),
+        'eps': FPS(),
         'ep/length': Mean(),
         'ep/reward': Mean(),
         'step/entropy': Mean(),
@@ -130,6 +131,7 @@ def main():
 
         metrics['loss'].update(loss.data.cpu().numpy())
         metrics['lr'].update(np.squeeze(scheduler.get_lr()))
+        metrics['eps'].update(1)
         metrics['ep/length'].update(ep_length)
         metrics['ep/reward'].update(ep_reward.data.cpu().numpy())
         metrics['step/entropy'].update(dist.entropy().data.cpu().numpy())

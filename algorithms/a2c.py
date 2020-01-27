@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.optim
 import torch.optim
-from all_the_tools.metrics import Mean, Last
+from all_the_tools.metrics import Mean, Last, FPS
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -79,6 +79,7 @@ def main():
     metrics = {
         'loss': Mean(),
         'lr': Last(),
+        'eps': FPS(),
         'ep/length': Mean(),
         'ep/reward': Mean(),
         'step/entropy': Mean(),
@@ -108,6 +109,7 @@ def main():
 
                 indices, = torch.where(d)
                 for i in indices:
+                    metrics['eps'].update(1)
                     metrics['ep/length'].update(ep_length[i].data.cpu().numpy())
                     metrics['ep/reward'].update(ep_reward[i].data.cpu().numpy())
                     ep_length[i] = 0
