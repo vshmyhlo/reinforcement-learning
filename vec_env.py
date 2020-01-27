@@ -6,9 +6,10 @@ import numpy as np
 Command = Enum('Command', [
     'RESET',
     'STEP',
-    'CLOSE',
+    'RENDER',
+    'SEED',
     'GET_META',
-    'SEED'
+    'CLOSE',
 ])
 
 
@@ -26,11 +27,14 @@ def worker(env_fn, conn):
             if done:
                 state = env.reset()
             conn.send((state, reward, done, meta))
-        elif command is Command.GET_META:
-            conn.send((env.observation_space, env.action_space, env.reward_range, env.metadata))
+        elif command is Command.RENDER:
+            mode, = data
+            conn.send(env.render(mode=mode))
         elif command is Command.SEED:
             seed, = data
             conn.send(env.seed(seed))
+        elif command is Command.GET_META:
+            conn.send((env.observation_space, env.action_space, env.reward_range, env.metadata))
         elif command is Command.CLOSE:
             conn.send(env.close())
             break
@@ -75,6 +79,18 @@ class VecEnv(object):
 
         return state, reward, done, meta
 
+    def render(self, mode='human'):
+        self.conns[0].send((Command.RENDER, mode))
+
+        return self.conns[0].recv()
+
+    def seed(self, seed):
+        for i, conn in enumerate(self.conns):
+            conn.send((Command.SEED, seed + i))
+
+        for conn in self.conns:
+            conn.recv()
+
     def close(self):
         for conn in self.conns:
             conn.send((Command.CLOSE,))
@@ -84,10 +100,3 @@ class VecEnv(object):
 
         for process in self.processes:
             process.join()
-
-    def seed(self, seed):
-        for i, conn in enumerate(self.conns):
-            conn.send((Command.SEED, seed + i))
-
-        for conn in self.conns:
-            conn.recv()

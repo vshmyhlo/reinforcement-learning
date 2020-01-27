@@ -94,11 +94,16 @@ def main():
     s = env.reset()
 
     bar = tqdm(total=config.episodes, desc='training')
+    frames = []
     while episode < config.episodes:
         history = []
 
         with torch.no_grad():
             for _ in range(config.horizon):
+                if frames is not None:
+                    frame = torch.tensor(env.render(mode='rgb_array')).permute(2, 0, 1)
+                    frames.append(frame)
+
                 a, _ = model(s.float())
                 a = a.sample()
                 s_prime, r, d, _ = env.step(a)
@@ -118,7 +123,7 @@ def main():
                     scheduler.step()
                     bar.update(1)
 
-                    if episode % config.log_interval == 0:
+                    if episode % config.log_interval == 0 and episode > 0:
                         for k in metrics:
                             writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
                         writer.add_histogram('step/action', actions, global_step=episode)
@@ -126,6 +131,12 @@ def main():
                         writer.add_histogram('step/return', returns, global_step=episode)
                         writer.add_histogram('step/value', values, global_step=episode)
                         writer.add_histogram('step/advantage', advantages, global_step=episode)
+
+                    if i == 0:
+                        if frames is not None:
+                            writer.add_video(
+                                'episode', torch.stack(frames, 0).unsqueeze(0), fps=24, global_step=episode)
+                        frames = []
 
             states, actions, rewards, dones, state_prime = build_batch(history, s_prime.float())  # TODO: s or s_prime?
 

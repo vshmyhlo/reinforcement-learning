@@ -136,7 +136,7 @@ def main():
         metrics['ep/reward'].update(ep_reward.data.cpu().numpy())
         metrics['step/entropy'].update(dist.entropy().data.cpu().numpy())
 
-        if episode % config.log_interval == 0:
+        if episode % config.log_interval == 0 and episode > 0:
             for k in metrics:
                 writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
             writer.add_histogram('step/action', actions, global_step=episode)
@@ -144,7 +144,8 @@ def main():
             writer.add_histogram('step/return', returns, global_step=episode)
             writer.add_histogram('step/value', values, global_step=episode)
             writer.add_histogram('step/advantage', advantages, global_step=episode)
-            writer.add_video('episode', torch.stack(frames, 0).unsqueeze(0), fps=24, global_step=episode)
+            if frames is not None:
+                writer.add_video('episode', torch.stack(frames, 0).unsqueeze(0), fps=24, global_step=episode)
 
 
 if __name__ == '__main__':

@@ -1,5 +1,5 @@
 env: Pong-v0
-episodes: 10000
+episodes: 30000
 log_interval: 100
 transform: image
 
