@@ -5,7 +5,7 @@ from utils import n_step_discounted_return
 from vec_env import VecEnv
 
 
-class SampleEnv(object):
+class ThreeStepEnv(object):
     def __init__(self):
         self.observation_space = object()
         self.action_space = object()
@@ -21,6 +21,9 @@ class SampleEnv(object):
 
         return 'abc'[self.i], a * 10, self.i >= 2, None
 
+    def close(self):
+        pass
+
     @staticmethod
     def value(s):
         return {
@@ -31,7 +34,7 @@ class SampleEnv(object):
 
 
 def test_vec_env():
-    env = VecEnv([lambda: SampleEnv() for _ in range(3)])
+    env = VecEnv([lambda: ThreeStepEnv() for _ in range(3)])
 
     history = []
     s = env.reset()
@@ -61,7 +64,7 @@ def test_vec_env():
     r = torch.tensor(r, dtype=torch.float).transpose(0, 1)
     d = torch.tensor(d, dtype=torch.bool).transpose(0, 1)
 
-    v = torch.tensor([SampleEnv.value(s) for s in s_prime])
+    v = torch.tensor([ThreeStepEnv.value(s) for s in s_prime])
     actual = n_step_discounted_return(r, v, d, 0.9)
     expected = torch.tensor([
         [16.2, 18.],

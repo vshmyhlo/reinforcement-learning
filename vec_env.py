@@ -32,6 +32,7 @@ def worker(env_fn, conn):
             seed, = data
             conn.send(env.seed(seed))
         elif command is Command.CLOSE:
+            conn.send(env.close())
             break
         else:
             raise AssertionError('invalid command {}'.format(command))
@@ -39,7 +40,7 @@ def worker(env_fn, conn):
 
 class VecEnv(object):
     def __init__(self, env_fns):
-        self.conns, child_conns = zip(*[Pipe() for _ in range(len(env_fns))])
+        self.conns, child_conns = zip(*[Pipe(duplex=True) for _ in range(len(env_fns))])
         self.processes = [
             Process(target=worker, args=(env_fn, child_conn))
             for env_fn, child_conn in zip(env_fns, child_conns)]
@@ -54,14 +55,15 @@ class VecEnv(object):
         for conn in self.conns:
             conn.send((Command.RESET,))
 
-        state = np.array([conn.recv() for conn in self.conns])
+        state = [conn.recv() for conn in self.conns]
+        state = np.array(state)
 
         return state
 
-    def step(self, actions):
-        assert len(actions) == len(self.conns)
+    def step(self, action):
+        assert len(action) == len(self.conns)
 
-        for conn, action in zip(self.conns, actions):
+        for conn, action in zip(self.conns, action):
             conn.send((Command.STEP, action))
 
         state, reward, done, meta = zip(*[conn.recv() for conn in self.conns])
@@ -75,6 +77,9 @@ class VecEnv(object):
     def close(self):
         for conn in self.conns:
             conn.send((Command.CLOSE,))
+
+        for conn in self.conns:
+            conn.recv()
 
         for process in self.processes:
             process.join()
