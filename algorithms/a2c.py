@@ -1,5 +1,3 @@
-import os
-
 import gym
 import numpy as np
 import torch
@@ -12,8 +10,9 @@ from tqdm import tqdm
 
 import utils
 import wrappers
-from algorithms.common import build_optimizer
-from model import Model, ModelShared
+from algorithms.common import build_optimizer, build_transform
+from config import build_default_config
+from model import Model
 from utils import n_step_discounted_return
 from vec_env import VecEnv
 
@@ -59,23 +58,30 @@ def build_parser():
 
 def main():
     args = build_parser().parse_args()
-    seed_torch(args.seed)
+    config = build_default_config()
+    config.merge_from_file(args.config_path)
+    config.experiment_path = args.experiment_path
+    config.freeze()
+    del args
+
+    seed_torch(config.seed)
     env = wrappers.Torch(
-        VecEnv([lambda: gym.make(args.env) for _ in range(args.workers)]),
+        VecEnv([
+            lambda: gym.wrappers.TransformObservation(
+                gym.make(config.env),
+                build_transform(config.transform))
+            for _ in range(config.workers)]),
         device=DEVICE)
-    env.seed(args.seed)
-    writer = SummaryWriter(args.experiment_path)
+    env.seed(config.seed)
+    writer = SummaryWriter(config.experiment_path)
 
-    if args.monitor:
-        env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
+    # if args.monitor:
+    #     env = gym.wrappers.Monitor(env, os.path.join('./data', config.env), force=True)
 
-    if args.shared:
-        model = ModelShared(env.observation_space.shape, env.action_space.n)
-    else:
-        model = Model(env.observation_space.shape, env.action_space.n)
+    model = Model(config.model, env.observation_space.shape, env.action_space.n)
     model = model.to(DEVICE)
-    optimizer = build_optimizer(args.optimizer, model.parameters(), args.learning_rate)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.episodes)
+    optimizer = build_optimizer(config.opt, model.parameters())
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, config.episodes)
 
     metrics = {
         'loss': Mean(),
@@ -89,16 +95,16 @@ def main():
     # training loop
     model.train()
     episode = 0
-    ep_length = torch.zeros(args.workers, device=DEVICE)
-    ep_reward = torch.zeros(args.workers, device=DEVICE)
+    ep_length = torch.zeros(config.workers, device=DEVICE)
+    ep_reward = torch.zeros(config.workers, device=DEVICE)
     s = env.reset()
 
-    bar = tqdm(total=args.episodes, desc='training')
-    while episode < args.episodes:
+    bar = tqdm(total=config.episodes, desc='training')
+    while episode < config.episodes:
         history = []
 
         with torch.no_grad():
-            for _ in range(args.horizon):
+            for _ in range(config.horizon):
                 a, _ = model(s.float())
                 a = a.sample()
                 s_prime, r, d, _ = env.step(a)
@@ -117,7 +123,7 @@ def main():
                     scheduler.step()
                     bar.update(1)
 
-                    if episode % args.log_interval == 0:
+                    if episode % config.log_interval == 0:
                         for k in metrics:
                             writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
                         writer.add_histogram('step/action', actions, global_step=episode)
@@ -133,14 +139,14 @@ def main():
         value_prime = value_prime.detach()
 
         # critic
-        returns = n_step_discounted_return(rewards, value_prime, dones, gamma=args.gamma)
+        returns = n_step_discounted_return(rewards, value_prime, dones, gamma=config.gamma)
         errors = returns - values
         critic_loss = errors**2
 
         # actor
         advantages = errors.detach()
         actor_loss = -(dist.log_prob(actions) * advantages)
-        actor_loss -= args.entropy_weight * dist.entropy()
+        actor_loss -= config.entropy_weight * dist.entropy()
 
         loss = (actor_loss + critic_loss).sum(1)
 
