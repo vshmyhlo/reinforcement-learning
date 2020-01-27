@@ -1,5 +1,3 @@
-import argparse
-
 import torch
 
 
@@ -44,10 +42,3 @@ def generalized_advantage_estimation(rewards, values, value_prime, dones, gamma,
 
 def normalize(input):
     return (input - input.mean()) / input.std()
-
-
-class ArgumentParser(argparse.ArgumentParser):
-    def __init__(self):
-        super().__init__()
-
-        self.add_argument('--seed', type=int, default=42)

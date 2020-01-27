@@ -1,3 +1,5 @@
+import argparse
+
 import gym
 import numpy as np
 import torch
@@ -8,7 +10,6 @@ from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
-import utils
 import wrappers
 from algorithms.common import build_optimizer, build_transform
 from config import build_default_config
@@ -39,18 +40,9 @@ def build_batch(history, state_prime):
 
 
 def build_parser():
-    parser = utils.ArgumentParser()
-    parser.add_argument('--horizon', type=int, default=8)
-    parser.add_argument('--learning-rate', type=float, default=1e-3)
-    parser.add_argument('--optimizer', type=str, choices=['momentum', 'rmsprop', 'adam'], default='adam')
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/a2c')
-    parser.add_argument('--env', type=str, required=True)
-    parser.add_argument('--episodes', type=int, default=10000)
-    parser.add_argument('--log-interval', type=int, default=100)
-    parser.add_argument('--entropy-weight', type=float, default=1e-2)
-    parser.add_argument('--gamma', type=float, default=0.99)
-    parser.add_argument('--workers', type=int, default=32)
-    parser.add_argument('--shared', action='store_true')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-mc')
+    parser.add_argument('--config-path', type=str, required=True)
     parser.add_argument('--monitor', action='store_true')
 
     return parser

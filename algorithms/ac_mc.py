@@ -1,3 +1,4 @@
+import argparse
 import itertools
 
 import gym
@@ -9,7 +10,6 @@ from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
-import utils
 import wrappers
 from algorithms.common import build_optimizer, build_transform
 from config import build_default_config
@@ -39,8 +39,8 @@ def build_batch(history):
 
 
 def build_parser():
-    parser = utils.ArgumentParser()
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/ac-mc')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-mc')
     parser.add_argument('--config-path', type=str, required=True)
     parser.add_argument('--monitor', action='store_true')
 
