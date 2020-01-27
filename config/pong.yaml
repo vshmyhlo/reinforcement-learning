@@ -1,0 +1,9 @@
+env: Pong-v0
+episodes: 1000
+log_interval: 50
+transform: image
+
+model:
+  encoder:
+    type: conv
+    shared: True

@@ -13,7 +13,7 @@ from tqdm import tqdm
 import utils
 import wrappers
 from algorithms.common import build_optimizer
-from model import Model
+from model import Model, ModelShared
 from utils import n_step_discounted_return
 from vec_env import VecEnv
 
@@ -51,6 +51,7 @@ def build_parser():
     parser.add_argument('--entropy-weight', type=float, default=1e-2)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--workers', type=int, default=32)
+    parser.add_argument('--shared', action='store_true')
     parser.add_argument('--monitor', action='store_true')
 
     return parser
@@ -68,7 +69,10 @@ def main():
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
 
-    model = Model(env.observation_space.shape, env.action_space.n)
+    if args.shared:
+        model = ModelShared(env.observation_space.shape, env.action_space.n)
+    else:
+        model = Model(env.observation_space.shape, env.action_space.n)
     model = model.to(DEVICE)
     optimizer = build_optimizer(args.optimizer, model.parameters(), args.learning_rate)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.episodes)
@@ -76,8 +80,9 @@ def main():
     metrics = {
         'loss': Mean(),
         'lr': Last(),
-        'ep_length': Mean(),
-        'ep_reward': Mean(),
+        'ep/length': Mean(),
+        'ep/reward': Mean(),
+        'step/entropy': Mean(),
     }
 
     # ==================================================================================================================
@@ -115,7 +120,7 @@ def main():
                     if episode % args.log_interval == 0:
                         for k in metrics:
                             writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
-                        writer.add_histogram('step/action', dist.probs, global_step=episode)
+                        writer.add_histogram('step/action', actions, global_step=episode)
                         writer.add_histogram('step/reward', rewards, global_step=episode)
                         writer.add_histogram('step/return', returns, global_step=episode)
                         writer.add_histogram('step/value', values, global_step=episode)
@@ -142,7 +147,7 @@ def main():
         metrics['loss'].update(loss.data.cpu().numpy())
         metrics['lr'].update(np.squeeze(scheduler.get_lr()))
         metrics['step/entropy'].update(dist.entropy().data.cpu().numpy())
-       
+
         # training
         optimizer.zero_grad()
         loss.mean().backward()

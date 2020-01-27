@@ -1,14 +1,16 @@
 import torch
 import torch.nn as nn
 
-SIZE = 32
+
+class NoOp(nn.Module):
+    def forward(self, input):
+        return input
 
 
-class Activation(nn.PReLU):
-    pass
+class Activation(nn.ReLU):
+    def __init__(self):
+        super().__init__(inplace=True)
 
-
-# TODO: atari shared
 
 class ConvNorm(nn.Sequential):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
@@ -21,8 +23,59 @@ class ConvNorm(nn.Sequential):
             nn.BatchNorm2d(out_channels))
 
 
-class ConvEmbedder(nn.Module):
-    def __init__(self, in_channels):
+class Model(nn.Module):
+    def __init__(self, model, state_shape, num_actions):
+        def build_encoder():
+            if model.encoder.type == 'dense':
+                assert len(state_shape) == 1
+                return Encoder(state_shape[0], model.size)
+            elif model.encoder.type == 'conv':
+                assert len(state_shape) == 3
+                return ConvEncoder(state_shape[2], model.size)
+            else:
+                raise AssertionError('invalid model.encoder.type {}'.format(model.encoder.type))
+
+        super().__init__()
+
+        if model.encoder.shared:
+            self.encoder = build_encoder()
+            self.policy = PolicyCategorical(model.size, num_actions)
+            self.value_function = ValueFunction(model.size)
+        else:
+            self.encoder = NoOp()
+            self.policy = nn.Sequential(
+                build_encoder(),
+                PolicyCategorical(model.size, num_actions))
+            self.value_function = nn.Sequential(
+                build_encoder(),
+                ValueFunction(model.size))
+
+    def forward(self, input):
+        input = self.encoder(input)
+        dist = self.policy(input)
+        value = self.value_function(input)
+
+        return dist, value
+
+
+class Encoder(nn.Module):
+    def __init__(self, in_features, out_features):
+        super().__init__()
+
+        self.layers = nn.Sequential(
+            nn.Linear(in_features, out_features),
+            Activation(),
+            nn.Linear(out_features, out_features),
+            Activation())
+
+    def forward(self, input):
+        input = self.layers(input)
+
+        return input
+
+
+class ConvEncoder(nn.Module):
+    def __init__(self, in_channels, out_features):
         super().__init__()
 
         base = 16
@@ -39,7 +92,7 @@ class ConvEmbedder(nn.Module):
             ConvNorm(base * 2**2, base * 2**3, 3, stride=2, padding=3 // 2),
             Activation())
         self.pool = nn.AdaptiveMaxPool2d(1)
-        self.output = nn.Linear(base * 2**3, SIZE)
+        self.output = nn.Linear(base * 2**3, out_features)
 
     def forward(self, input):
         dim = input.dim()
@@ -63,106 +116,11 @@ class ConvEmbedder(nn.Module):
         return input
 
 
-class Model(nn.Module):
-    def __init__(self, state_shape, num_actions):
-        def build_embedder():
-            if len(state_shape) == 1:
-                return Embedder(state_shape[0])
-            else:
-                return ConvEmbedder(state_shape[2])
-
-        super().__init__()
-
-        self.policy = nn.Sequential(
-            build_embedder(),
-            PolicyCategorical(num_actions))
-
-        self.value_function = nn.Sequential(
-            build_embedder(),
-            ValueFunction())
-
-    def forward(self, input):
-        dist = self.policy(input)
-        value = self.value_function(input)
-
-        return dist, value
-
-
-class ModelRNN(nn.Module):
-    def __init__(self, state_size, num_actions):
-        super().__init__()
-
-        self.policy_embedder = EmbedderRNN(state_size)
-        self.policy_module = PolicyCategorical(num_actions)
-
-        self.value_function_embedder = EmbedderRNN(state_size)
-        self.value_function_module = ValueFunction()
-
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_normal_(m.weight)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-
-    def policy(self, input, hidden):
-        input, hidden = self.policy_embedder(input, hidden)
-        input = self.policy_module(input)
-
-        return input, hidden
-
-    def value_function(self, input, hidden):
-        input, hidden = self.value_function_embedder(input, hidden)
-        input = self.value_function_module(input)
-
-        return input, hidden
-
-
-class EmbedderRNN(nn.Module):
-    def __init__(self, in_features):
-        super().__init__()
-
-        self.rnn = nn.LSTM(in_features, SIZE, batch_first=True, bidirectional=False)
-
-    def forward(self, input, hidden):
-        dim = input.dim()
-
-        if dim == 1:
-            input = input.view(1, 1, input.size(0))
-        elif dim == 2:
-            input = input.unsqueeze(1)
-
-        assert input.dim() == 3
-        input, hidden = self.rnn(input, hidden)
-
-        if dim == 1:
-            input = input.view(input.size(2))
-        elif dim == 2:
-            input = input.squeeze(1)
-
-        return input, hidden
-
-
-class Embedder(nn.Module):
-    def __init__(self, in_features):
-        super().__init__()
-
-        self.layers = nn.Sequential(
-            nn.Linear(in_features, SIZE),
-            Activation(),
-            nn.Linear(SIZE, SIZE),
-            Activation())
-
-    def forward(self, input):
-        input = self.layers(input)
-
-        return input
-
-
 class ValueFunction(nn.Sequential):
-    def __init__(self):
+    def __init__(self, in_features):
         super().__init__()
 
-        self.layers = nn.Linear(SIZE, 1)
+        self.layers = nn.Linear(in_features, 1)
 
     def forward(self, input):
         input = self.layers(input)
@@ -172,10 +130,10 @@ class ValueFunction(nn.Sequential):
 
 
 class PolicyCategorical(nn.Module):
-    def __init__(self, num_actions):
+    def __init__(self, in_features, num_actions):
         super().__init__()
 
-        self.layers = nn.Linear(SIZE, num_actions)
+        self.layers = nn.Linear(in_features, num_actions)
 
     def forward(self, input):
         input = self.layers(input)

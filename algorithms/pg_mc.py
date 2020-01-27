@@ -13,7 +13,7 @@ from tqdm import tqdm
 import utils
 import wrappers
 from algorithms.common import build_optimizer
-from model import Model
+from model import Model, ModelShared
 from utils import total_discounted_return
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -48,6 +48,7 @@ def build_parser():
     parser.add_argument('--log-interval', type=int, default=100)
     parser.add_argument('--entropy-weight', type=float, default=1e-2)
     parser.add_argument('--gamma', type=float, default=0.99)
+    parser.add_argument('--shared', action='store_true')
     parser.add_argument('--monitor', action='store_true')
 
     return parser
@@ -63,7 +64,10 @@ def main():
     if args.monitor:
         env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
 
-    model = Model(env.observation_space.shape, env.action_space.n)
+    if args.shared:
+        model = ModelShared(env.observation_space.shape, env.action_space.n)
+    else:
+        model = Model(env.observation_space.shape, env.action_space.n)
     model = model.to(DEVICE)
     optimizer = build_optimizer(args.optimizer, model.parameters(), args.learning_rate)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.episodes)
@@ -129,7 +133,7 @@ def main():
         if episode % args.log_interval == 0:
             for k in metrics:
                 writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
-            writer.add_histogram('step/action', dist.probs, global_step=episode)
+            writer.add_histogram('step/action', actions, global_step=episode)
             writer.add_histogram('step/reward', rewards, global_step=episode)
             writer.add_histogram('step/return', returns, global_step=episode)
             writer.add_histogram('step/advantage', advantages, global_step=episode)
