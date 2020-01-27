@@ -130,9 +130,9 @@ def main():
         dist, values = model(states)
         _, value_prime = model(state_prime)
         value_prime = value_prime.detach()
+        returns = n_step_discounted_return(rewards, value_prime, dones, gamma=config.gamma)
 
         # critic
-        returns = n_step_discounted_return(rewards, value_prime, dones, gamma=config.gamma)
         errors = returns - values
         critic_loss = errors**2
 
