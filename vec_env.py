@@ -7,7 +7,7 @@ Command = Enum('Command', [
     'RESET',
     'STEP',
     'CLOSE',
-    'GET_SPACES',
+    'GET_META',
     'SEED'
 ])
 
@@ -26,8 +26,8 @@ def worker(env_fn, conn):
             if done:
                 state = env.reset()
             conn.send((state, reward, done, meta))
-        elif command is Command.GET_SPACES:
-            conn.send((env.observation_space, env.action_space))
+        elif command is Command.GET_META:
+            conn.send((env.observation_space, env.action_space, env.reward_range, env.metadata))
         elif command is Command.SEED:
             seed, = data
             conn.send(env.seed(seed))
@@ -48,8 +48,9 @@ class VecEnv(object):
         for process in self.processes:
             process.start()
 
-        self.conns[0].send((Command.GET_SPACES,))
-        self.observation_space, self.action_space = self.conns[0].recv()
+        self.conns[0].send((Command.GET_META,))
+        self.observation_space, self.action_space, self.reward_range, self.metadata = \
+            self.conns[0].recv()
 
     def reset(self):
         for conn in self.conns:

@@ -1,6 +1,7 @@
 import argparse
 
 import gym
+import gym.wrappers
 import numpy as np
 import torch
 import torch.optim
