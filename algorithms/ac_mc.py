@@ -2,7 +2,6 @@ import itertools
 
 import gym
 import gym.wrappers
-import gym.wrappers
 import numpy as np
 import torch
 from all_the_tools.metrics import Mean, Last
@@ -110,9 +109,9 @@ def main():
             states, actions, rewards = build_batch(history)
 
         dist, values = model(states)
+        returns = total_discounted_return(rewards, gamma=config.gamma)
 
         # critic
-        returns = total_discounted_return(rewards, gamma=config.gamma)
         errors = returns - values
         critic_loss = errors**2
 

@@ -1,5 +1,4 @@
 import itertools
-import os
 
 import gym
 import gym.wrappers
@@ -12,8 +11,9 @@ from tqdm import tqdm
 
 import utils
 import wrappers
-from algorithms.common import build_optimizer
-from model import Model, ModelShared
+from algorithms.common import build_optimizer, build_transform
+from config import build_default_config
+from model import Model
 from utils import total_discounted_return
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -40,15 +40,8 @@ def build_batch(history):
 
 def build_parser():
     parser = utils.ArgumentParser()
-    parser.add_argument('--learning-rate', type=float, default=1e-3)
-    parser.add_argument('--optimizer', type=str, choices=['momentum', 'rmsprop', 'adam'], default='adam')
     parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-mc')
-    parser.add_argument('--env', type=str, required=True)
-    parser.add_argument('--episodes', type=int, default=10000)
-    parser.add_argument('--log-interval', type=int, default=100)
-    parser.add_argument('--entropy-weight', type=float, default=1e-2)
-    parser.add_argument('--gamma', type=float, default=0.99)
-    parser.add_argument('--shared', action='store_true')
+    parser.add_argument('--config-path', type=str, required=True)
     parser.add_argument('--monitor', action='store_true')
 
     return parser
@@ -56,21 +49,28 @@ def build_parser():
 
 def main():
     args = build_parser().parse_args()
-    seed_torch(args.seed)
-    env = wrappers.Torch(gym.make(args.env), device=DEVICE)
-    env.seed(args.seed)
-    writer = SummaryWriter(args.experiment_path)
+    config = build_default_config()
+    config.merge_from_file(args.config_path)
+    config.experiment_path = args.experiment_path
+    config.freeze()
+    del args
 
-    if args.monitor:
-        env = gym.wrappers.Monitor(env, os.path.join('./data', args.env), force=True)
+    seed_torch(config.seed)
+    env = wrappers.Torch(
+        gym.wrappers.TransformObservation(
+            gym.make(config.env),
+            build_transform(config.transform)),
+        device=DEVICE)
+    env.seed(config.seed)
+    writer = SummaryWriter(config.experiment_path)
 
-    if args.shared:
-        model = ModelShared(env.observation_space.shape, env.action_space.n)
-    else:
-        model = Model(env.observation_space.shape, env.action_space.n)
+    # if args.monitor:
+    #     env = gym.wrappers.Monitor(env, os.path.join('./data', config.env), force=True)
+
+    model = Model(config.model, env.observation_space.shape, env.action_space.n)
     model = model.to(DEVICE)
-    optimizer = build_optimizer(args.optimizer, model.parameters(), args.learning_rate)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.episodes)
+    optimizer = build_optimizer(config.opt, model.parameters())
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, config.episodes)
 
     metrics = {
         'loss': Mean(),
@@ -83,9 +83,9 @@ def main():
     # ==================================================================================================================
     # training loop
     model.train()
-    for episode in tqdm(range(args.episodes), desc='training'):
+    for episode in tqdm(range(config.episodes), desc='training'):
         history = []
-        frames = [] if episode % args.log_interval == 0 else None
+        frames = [] if episode % config.log_interval == 0 else None
         s = env.reset()
         ep_reward = 0
 
@@ -109,12 +109,12 @@ def main():
             states, actions, rewards = build_batch(history)
 
         dist, _ = model(states)
+        returns = total_discounted_return(rewards, gamma=config.gamma)
 
         # actor
-        returns = total_discounted_return(rewards, gamma=args.gamma)
         advantages = returns.detach()
         actor_loss = -(dist.log_prob(actions) * advantages)
-        actor_loss -= args.entropy_weight * dist.entropy()
+        actor_loss -= config.entropy_weight * dist.entropy()
 
         loss = actor_loss.sum(1)
 
@@ -130,7 +130,7 @@ def main():
         metrics['ep/reward'].update(ep_reward.data.cpu().numpy())
         metrics['step/entropy'].update(dist.entropy().data.cpu().numpy())
 
-        if episode % args.log_interval == 0:
+        if episode % config.log_interval == 0:
             for k in metrics:
                 writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
             writer.add_histogram('step/action', actions, global_step=episode)
