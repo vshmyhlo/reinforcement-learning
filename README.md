@@ -9,3 +9,5 @@
 * normalize input
 * skip-observations
 * optimize for speed
+* continious actions
+

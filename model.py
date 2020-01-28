@@ -13,13 +13,13 @@ class Activation(nn.ReLU):
 
 
 class ConvNorm(nn.Sequential):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1,
-                 padding=0, dilation=1, groups=1, padding_mode='zeros'):
+    def __init__(
+            self, in_channels, out_channels, kernel_size, stride=1,
+            padding=0, dilation=1, groups=1, padding_mode='zeros'):
         super().__init__(
             nn.Conv2d(
                 in_channels, out_channels, kernel_size, stride=stride,
-                padding=padding, dilation=dilation, groups=groups,
-                bias=False, padding_mode=padding_mode),
+                padding=padding, dilation=dilation, groups=groups, bias=False, padding_mode=padding_mode),
             nn.BatchNorm2d(out_channels))
 
 
@@ -28,7 +28,7 @@ class Model(nn.Module):
         def build_encoder():
             if model.encoder.type == 'dense':
                 assert len(state_shape) == 1
-                return Encoder(state_shape[0], model.size)
+                return DenseEncoder(state_shape[0], model.size)
             elif model.encoder.type == 'conv':
                 assert len(state_shape) == 3
                 return ConvEncoder(state_shape[2], model.encoder.size, model.size)
@@ -58,7 +58,7 @@ class Model(nn.Module):
         return dist, value
 
 
-class Encoder(nn.Module):
+class DenseEncoder(nn.Module):
     def __init__(self, in_features, out_features):
         super().__init__()
 
@@ -91,6 +91,14 @@ class ConvEncoder(nn.Module):
             Activation())
         self.pool = nn.AdaptiveMaxPool2d(1)
         self.output = nn.Linear(base_channels * 2**5, out_features)
+
+        for m in self.modules():
+            if isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight)
+                nn.init.constant_(m.bias, 0)
 
     def forward(self, input):
         dim = input.dim()
