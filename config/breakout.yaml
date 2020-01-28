@@ -1,4 +1,4 @@
-env: Pong-v0
+env: Breakout-v0
 episodes: 30000
 log_interval: 100
 transform: image

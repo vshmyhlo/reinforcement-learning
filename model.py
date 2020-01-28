@@ -31,7 +31,7 @@ class Model(nn.Module):
                 return Encoder(state_shape[0], model.size)
             elif model.encoder.type == 'conv':
                 assert len(state_shape) == 3
-                return ConvEncoder(state_shape[2], model.size)
+                return ConvEncoder(state_shape[2], model.encoder.size, model.size)
             else:
                 raise AssertionError('invalid model.encoder.type {}'.format(model.encoder.type))
 
@@ -75,24 +75,22 @@ class Encoder(nn.Module):
 
 
 class ConvEncoder(nn.Module):
-    def __init__(self, in_channels, out_features):
+    def __init__(self, in_channels, base_channels, out_features):
         super().__init__()
-
-        base = 16
 
         self.layers = nn.Sequential(
             nn.BatchNorm2d(in_channels),
-            ConvNorm(in_channels, base * 2**0, 7, stride=2, padding=7 // 2),
+            ConvNorm(in_channels, base_channels * 2**2, 7, stride=2, padding=7 // 2),
             Activation(),
             nn.MaxPool2d(3, 2),
-            ConvNorm(base * 2**0, base * 2**1, 3, stride=2, padding=3 // 2),
+            ConvNorm(base_channels * 2**2, base_channels * 2**3, 3, stride=2, padding=3 // 2),
             Activation(),
-            ConvNorm(base * 2**1, base * 2**2, 3, stride=2, padding=3 // 2),
+            ConvNorm(base_channels * 2**3, base_channels * 2**4, 3, stride=2, padding=3 // 2),
             Activation(),
-            ConvNorm(base * 2**2, base * 2**3, 3, stride=2, padding=3 // 2),
+            ConvNorm(base_channels * 2**4, base_channels * 2**5, 3, stride=2, padding=3 // 2),
             Activation())
         self.pool = nn.AdaptiveMaxPool2d(1)
-        self.output = nn.Linear(base * 2**3, out_features)
+        self.output = nn.Linear(base_channels * 2**5, out_features)
 
     def forward(self, input):
         dim = input.dim()

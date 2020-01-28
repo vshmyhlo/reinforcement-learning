@@ -13,12 +13,13 @@ def build_default_config():
     config.entropy_weight = 1e-2
     config.horizon = 8
     config.workers = 32
-   
+
     config.model = CN()
     config.model.size = 32
 
     config.model.encoder = CN()
     config.model.encoder.type = 'dense'
+    config.model.encoder.size = 16
     config.model.encoder.shared = True
 
     config.opt = CN()
