@@ -21,7 +21,7 @@ class Torch(gym.Wrapper):
         state, reward, done, meta = self.env.step(action)
 
         state = torch.tensor(state, device=self.device)
-        reward = torch.tensor(reward, device=self.device)
-        done = torch.tensor(done, device=self.device)
+        reward = torch.tensor(reward, dtype=torch.float, device=self.device)
+        done = torch.tensor(done, dtype=torch.bool, device=self.device)
 
         return state, reward, done, meta

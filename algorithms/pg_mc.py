@@ -42,7 +42,7 @@ def build_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-mc')
     parser.add_argument('--config-path', type=str, required=True)
-    parser.add_argument('--monitor', action='store_true')
+    parser.add_argument('--no-render', action='store_true')
 
     return parser
 
@@ -52,22 +52,23 @@ def main():
     config = build_default_config()
     config.merge_from_file(args.config_path)
     config.experiment_path = args.experiment_path
+    config.render = not args.no_render
     config.freeze()
     del args
 
     seed_torch(config.seed)
-    env = wrappers.Torch(
-        gym.wrappers.TransformObservation(
-            gym.make(config.env),
-            build_transform(config.transform)),
-        device=DEVICE)
+    env = gym.make(config.env)
+    if isinstance(env.action_space, gym.spaces.Box):
+        env = gym.wrappers.RescaleAction(env, 0., 1.)
+    env = gym.wrappers.TransformObservation(env, build_transform(config.transform))
+    env = wrappers.Torch(env, device=DEVICE)
     env.seed(config.seed)
     writer = SummaryWriter(config.experiment_path)
 
     # if args.monitor:
     #     env = gym.wrappers.Monitor(env, os.path.join('./data', config.env), force=True)
 
-    model = Model(config.model, env.observation_space.shape, env.action_space.n)
+    model = Model(config.model, env.observation_space, env.action_space)
     model = model.to(DEVICE)
     optimizer = build_optimizer(config.opt, model.parameters())
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, config.episodes)
@@ -86,7 +87,7 @@ def main():
     model.train()
     for episode in tqdm(range(config.episodes), desc='training'):
         history = []
-        frames = [] if episode % config.log_interval == 0 else None
+        frames = [] if episode % config.log_interval == 0 and config.render else None
         s = env.reset()
         ep_reward = 0
 
@@ -114,6 +115,8 @@ def main():
 
         # actor
         advantages = returns.detach()
+        if advantages.dim() < actions.dim():
+            advantages = advantages.unsqueeze(-1)
         actor_loss = -(dist.log_prob(actions) * advantages)
         actor_loss -= config.entropy_weight * dist.entropy()
 
