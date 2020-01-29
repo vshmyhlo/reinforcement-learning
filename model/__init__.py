@@ -94,7 +94,8 @@ class ConvEncoder(nn.Module):
                 nn.init.constant_(m.bias, 0)
             elif isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight)
-                nn.init.constant_(m.bias, 0)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
 
     def forward(self, input):
         dim = input.dim()

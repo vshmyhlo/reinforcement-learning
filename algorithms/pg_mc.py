@@ -13,6 +13,7 @@ from tqdm import tqdm
 import wrappers
 from algorithms.common import build_optimizer, build_transform
 from config import build_default_config
+from history import History
 from model import Model
 from utils import total_discounted_return
 
@@ -26,16 +27,6 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 # TODO: return normalization
 # TODO: monitored session
 # TODO: normalize advantage?
-
-
-def build_batch(history):
-    states, actions, rewards = zip(*history)
-
-    states = torch.stack(states, 1)
-    actions = torch.stack(actions, 1)
-    rewards = torch.stack(rewards, 1)
-
-    return states, actions, rewards
 
 
 def build_parser():
@@ -86,7 +77,7 @@ def main():
     # training loop
     model.train()
     for episode in tqdm(range(config.episodes), desc='training'):
-        history = []
+        history = History()
         frames = [] if episode % config.log_interval == 0 and config.render else None
         s = env.reset()
         ep_reward = 0
@@ -101,23 +92,22 @@ def main():
                 a = a.sample()
                 s_prime, r, d, _ = env.step(a)
                 ep_reward += r
-                history.append((s.float().unsqueeze(0), a.unsqueeze(0), r.unsqueeze(0)))
+                history.append(state=s.float().unsqueeze(0), action=a.unsqueeze(0), reward=r.unsqueeze(0))
 
                 if d:
                     break
                 else:
                     s = s_prime
 
-            states, actions, rewards = build_batch(history)
-
-        dist, _ = model(states)
-        returns = total_discounted_return(rewards, gamma=config.gamma)
+        rollout = history.build_rollout()
+        dist, _ = model(rollout.states)
+        returns = total_discounted_return(rollout.rewards, gamma=config.gamma)
 
         # actor
         advantages = returns.detach()
-        if advantages.dim() < actions.dim():
+        if isinstance(env.action_space, gym.spaces.Box):
             advantages = advantages.unsqueeze(-1)
-        actor_loss = -(dist.log_prob(actions) * advantages)
+        actor_loss = -(dist.log_prob(rollout.actions) * advantages)
         actor_loss -= config.entropy_weight * dist.entropy()
 
         loss = actor_loss.sum(1)
@@ -138,8 +128,8 @@ def main():
         if episode % config.log_interval == 0 and episode > 0:
             for k in metrics:
                 writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
-            writer.add_histogram('step/action', actions, global_step=episode)
-            writer.add_histogram('step/reward', rewards, global_step=episode)
+            writer.add_histogram('step/action', rollout.actions, global_step=episode)
+            writer.add_histogram('step/reward', rollout.rewards, global_step=episode)
             writer.add_histogram('step/return', returns, global_step=episode)
             writer.add_histogram('step/advantage', advantages, global_step=episode)
             if frames is not None:

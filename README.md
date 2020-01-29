@@ -10,4 +10,5 @@
 * skip-observations
 * optimize for speed
 * continious actions
-
+* frame stack
+* rnn-model
