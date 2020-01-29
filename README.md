@@ -12,3 +12,4 @@
 * continious actions
 * frame stack
 * rnn-model
+* 4-frames stack

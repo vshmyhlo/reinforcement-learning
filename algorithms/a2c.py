@@ -14,6 +14,7 @@ from tqdm import tqdm
 import wrappers
 from algorithms.common import build_optimizer, build_transform
 from config import build_default_config
+from history import History
 from model import Model
 from utils import n_step_discounted_return
 from vec_env import VecEnv
@@ -44,7 +45,7 @@ def build_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-mc')
     parser.add_argument('--config-path', type=str, required=True)
-    parser.add_argument('--monitor', action='store_true')
+    parser.add_argument('--no-render', action='store_true')
 
     return parser
 
@@ -68,10 +69,7 @@ def main():
     env.seed(config.seed)
     writer = SummaryWriter(config.experiment_path)
 
-    # if args.monitor:
-    #     env = gym.wrappers.Monitor(env, os.path.join('./data', config.env), force=True)
-
-    model = Model(config.model, env.observation_space.shape, env.action_space.n)
+    model = Model(config.model, env.observation_space, env.action_space)
     model = model.to(DEVICE)
     optimizer = build_optimizer(config.opt, model.parameters())
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, config.episodes)
@@ -96,7 +94,7 @@ def main():
     bar = tqdm(total=config.episodes, desc='training')
     frames = []
     while episode < config.episodes:
-        history = []
+        history = History()
 
         with torch.no_grad():
             for _ in range(config.horizon):
@@ -138,12 +136,11 @@ def main():
                                 'episode', torch.stack(frames, 0).unsqueeze(0), fps=24, global_step=episode)
                         frames = []
 
-            states, actions, rewards, dones, state_prime = build_batch(history, s_prime.float())  # TODO: s or s_prime?
-
-        dist, values = model(states)
-        _, value_prime = model(state_prime)
+        rollout = history.build_rollout(s_prime.float())  # TODO: s or s_prime?
+        dist, values = model(rollout.states)
+        _, value_prime = model(rollout.state_prime)
         value_prime = value_prime.detach()
-        returns = n_step_discounted_return(rewards, value_prime, dones, gamma=config.gamma)
+        returns = n_step_discounted_return(rollout.rewards, value_prime, rollout.dones, gamma=config.gamma)
 
         # critic
         errors = returns - values
@@ -151,7 +148,7 @@ def main():
 
         # actor
         advantages = errors.detach()
-        actor_loss = -(dist.log_prob(actions) * advantages)
+        actor_loss = -(dist.log_prob(rollout.actions) * advantages)
         actor_loss -= config.entropy_weight * dist.entropy()
 
         loss = (actor_loss + critic_loss).sum(1)
