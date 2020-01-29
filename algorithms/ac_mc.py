@@ -56,9 +56,6 @@ def main():
     env.seed(config.seed)
     writer = SummaryWriter(config.experiment_path)
 
-    # if args.monitor:
-    #     env = gym.wrappers.Monitor(env, os.path.join('./data', config.env), force=True)
-
     model = Model(config.model, env.observation_space, env.action_space)
     model = model.to(DEVICE)
     optimizer = build_optimizer(config.opt, model.parameters())
@@ -113,6 +110,8 @@ def main():
             advantages = advantages.unsqueeze(-1)
         actor_loss = -(dist.log_prob(rollout.actions) * advantages)
         actor_loss -= config.entropy_weight * dist.entropy()
+        if isinstance(env.action_space, gym.spaces.Box):
+            actor_loss = actor_loss.mean(-1)
 
         loss = (actor_loss + critic_loss).sum(1)
 
