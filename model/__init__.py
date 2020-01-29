@@ -99,9 +99,8 @@ class ConvEncoder(nn.Module):
 
     def forward(self, input):
         dim = input.dim()
-        if dim == 3:
-            input = input.unsqueeze(0)
-        elif dim == 5:
+
+        if dim == 5:
             b, t, c, h, w = input.size()
             input = input.reshape(b * t, c, h, w)
 
@@ -111,9 +110,7 @@ class ConvEncoder(nn.Module):
         input = input.view(input.size(0), input.size(1))
         input = self.output(input)
 
-        if dim == 3:
-            input = input.squeeze(0)
-        elif dim == 5:
+        if dim == 5:
             input = input.view(b, t, input.size(1))
 
         return input
