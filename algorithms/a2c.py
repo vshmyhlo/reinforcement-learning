@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import gym
 import gym.wrappers
@@ -28,17 +29,6 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 # TODO: shared weights
 # TODO: normalize advantage?
 # TODO: normalize input (especially images)
-
-
-def build_batch(history, state_prime):
-    states, actions, rewards, dones = zip(*history)
-
-    states = torch.stack(states, 1)
-    actions = torch.stack(actions, 1)
-    rewards = torch.stack(rewards, 1)
-    dones = torch.stack(dones, 1)
-
-    return states, actions, rewards, dones, state_prime
 
 
 def build_parser():
@@ -122,13 +112,15 @@ def main():
                     bar.update(1)
 
                     if episode % config.log_interval == 0 and episode > 0:
+                        torch.save(model.state_dict(os.path.join(config.experiment_path, 'model.pth')))
+                       
                         for k in metrics:
                             writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
-                        writer.add_histogram('step/action', actions, global_step=episode)
-                        writer.add_histogram('step/reward', rewards, global_step=episode)
-                        writer.add_histogram('step/return', returns, global_step=episode)
-                        writer.add_histogram('step/value', values, global_step=episode)
-                        writer.add_histogram('step/advantage', advantages, global_step=episode)
+                        writer.add_histogram('step/action', rollout.actions, global_step=episode)
+                        writer.add_histogram('step/reward', rollout.rewards, global_step=episode)
+                        writer.add_histogram('step/return', rollout.returns, global_step=episode)
+                        writer.add_histogram('step/value', rollout.values, global_step=episode)
+                        writer.add_histogram('step/advantage', rollout.advantages, global_step=episode)
 
                     if i == 0:
                         if frames is not None:

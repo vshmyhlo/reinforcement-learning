@@ -1,4 +1,42 @@
-from yacs.config import CfgNode as CN
+from ruamel.yaml import YAML
+
+
+class CN(dict):
+    def __init__(self):
+        super().__init__()
+
+        self.frozen = False
+
+    def __getattr__(self, key):
+        return self[key]
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
+    def freeze(self):
+        assert not self.frozen
+        self.frozen = True
+
+    def merge_from_file(self, path):
+        return
+
+        with open(path) as f:
+            config = self.build_from_dict(YAML().load(f))
+            pass
+
+    def check_types(self, a, b):
+        pass
+
+    @classmethod
+    def build_from_dict(cls, data):
+        return
+        config = CN()
+
+        for k in data:
+            if isinstance(data[k], dict):
+                config[k] = cls.build_from_dict(data[k])
+            else:
+                config[k] = data[k]
 
 
 def build_default_config():
