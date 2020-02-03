@@ -1,13 +1,12 @@
 import argparse
+import os
 
 import gym
 import gym.wrappers
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.optim
-import torch.optim
-from all_the_tools.metrics import Mean, Last, FPS
+from all_the_tools.metrics import Mean, FPS, Last
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -15,37 +14,26 @@ from tqdm import tqdm
 import wrappers
 from algorithms.common import build_optimizer, build_transform
 from config import build_default_config
-from model import Model
+from history import History
+from model import ModelRNN
 from utils import n_step_discounted_return
 from vec_env import VecEnv
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-# TODO: finite horizon undiscounted
 # TODO: torch wrapper
 # TODO: revisit stat calculation
-# TODO: shared weights
 # TODO: normalize advantage?
 # TODO: normalize input (especially images)
-
-
-def build_batch(history, state_prime):
-    states, actions, rewards, dones = zip(*history)
-
-    states = torch.stack(states, 1)
-    actions = torch.stack(actions, 1)
-    rewards = torch.stack(rewards, 1)
-    dones = torch.stack(dones, 1)
-
-    return states, actions, rewards, dones, state_prime
 
 
 def build_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-mc')
     parser.add_argument('--config-path', type=str, required=True)
-    parser.add_argument('--monitor', action='store_true')
+    parser.add_argument('--restore-path', type=str)
+    parser.add_argument('--no-render', action='store_true')
 
     return parser
 
@@ -55,25 +43,23 @@ def main():
     config = build_default_config()
     config.merge_from_file(args.config_path)
     config.experiment_path = args.experiment_path
+    config.restore_path = args.restore_path
     config.freeze()
     del args
 
     seed_torch(config.seed)
     env = wrappers.Torch(
         VecEnv([
-            lambda: gym.wrappers.TransformObservation(
-                gym.make(config.env),
-                build_transform(config.transform))
+            lambda: build_transform(gym.make(config.env), config.transforms)
             for _ in range(config.workers)]),
         device=DEVICE)
     env.seed(config.seed)
     writer = SummaryWriter(config.experiment_path)
 
-    # if args.monitor:
-    #     env = gym.wrappers.Monitor(env, os.path.join('./data', config.env), force=True)
-
-    model = Model(config.model, env.observation_space, env.action_space)
+    model = ModelRNN(config.model, env.observation_space, env.action_space)
     model = model.to(DEVICE)
+    if config.restore_path is not None:
+        model.load_state_dict(torch.load(config.restore_path))
     optimizer = build_optimizer(config.opt, model.parameters())
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, config.episodes)
 
@@ -93,11 +79,12 @@ def main():
     ep_length = torch.zeros(config.workers, device=DEVICE)
     ep_reward = torch.zeros(config.workers, device=DEVICE)
     s = env.reset()
+    h = None
 
     bar = tqdm(total=config.episodes, desc='training')
     frames = []
     while episode < config.episodes:
-        history = []
+        history = History()
 
         with torch.no_grad():
             for _ in range(config.horizon):
@@ -105,13 +92,14 @@ def main():
                     frame = torch.tensor(env.render(mode='rgb_array')).permute(2, 0, 1)
                     frames.append(frame)
 
-                a, _ = model(s.float())
+                a, _, h_prime = model(s.float(), h)
                 a = a.sample()
                 s_prime, r, d, _ = env.step(a)
                 ep_length += 1
                 ep_reward += r
-                history.append((s.float(), a, r, d))
+                history.append(state=s.float(), action=a, reward=r, done=d)
                 s = s_prime
+                h = torch.where(d, torch.zeros_like(h_prime), h_prime)
 
                 indices, = torch.where(d)
                 for i in indices:
@@ -127,11 +115,16 @@ def main():
                     if episode % config.log_interval == 0 and episode > 0:
                         for k in metrics:
                             writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
-                        writer.add_histogram('step/action', actions, global_step=episode)
-                        writer.add_histogram('step/reward', rewards, global_step=episode)
+                        writer.add_histogram('step/action', rollout.actions, global_step=episode)
+                        writer.add_histogram('step/reward', rollout.rewards, global_step=episode)
                         writer.add_histogram('step/return', returns, global_step=episode)
                         writer.add_histogram('step/value', values, global_step=episode)
                         writer.add_histogram('step/advantage', advantages, global_step=episode)
+
+                    if episode % 1000 == 0:
+                        torch.save(
+                            model.state_dict(),
+                            os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
 
                     if i == 0:
                         if frames is not None:
@@ -139,12 +132,11 @@ def main():
                                 'episode', torch.stack(frames, 0).unsqueeze(0), fps=24, global_step=episode)
                         frames = []
 
-            states, actions, rewards, dones, state_prime = build_batch(history, s_prime.float())  # TODO: s or s_prime?
-
-        dist, values = model(states)
-        _, value_prime = model(state_prime)
+        rollout = history.build_rollout(s_prime.float())  # TODO: s or s_prime?
+        dist, values = model(rollout.states)
+        _, value_prime = model(rollout.state_prime)
         value_prime = value_prime.detach()
-        returns = n_step_discounted_return(rewards, value_prime, dones, gamma=config.gamma)
+        returns = n_step_discounted_return(rollout.rewards, value_prime, rollout.dones, gamma=config.gamma)
 
         # critic
         errors = returns - values
@@ -152,7 +144,7 @@ def main():
 
         # actor
         advantages = errors.detach()
-        actor_loss = -(dist.log_prob(actions) * advantages)
+        actor_loss = -(dist.log_prob(rollout.actions) * advantages)
         actor_loss -= config.entropy_weight * dist.entropy()
 
         loss = (actor_loss + critic_loss).sum(1)
@@ -164,8 +156,7 @@ def main():
         # training
         optimizer.zero_grad()
         loss.mean().backward()
-        if config.opt.clip_grad_norm:
-            nn.utils.clip_grad_norm_(model.parameters(), config.opt.clip_grad_norm)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 10.)
         optimizer.step()
 
     bar.close()

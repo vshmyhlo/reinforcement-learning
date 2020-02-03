@@ -1,7 +1,25 @@
+import gym.wrappers
+import numba
+import numpy as np
 import torch
-import torchvision.transforms as T
 
-from transforms import ToImage
+import wrappers
+
+
+def permute_and_normalize(input):
+    input = np.moveaxis(input, 2, 0)
+    input = normalize(input)
+
+    return input
+
+
+@numba.njit()
+def normalize(input):
+    input = input.astype(np.float32)
+    input -= 255 / 2
+    input /= 255 / 2
+
+    return input
 
 
 def build_optimizer(optimizer, parameters):
@@ -15,12 +33,15 @@ def build_optimizer(optimizer, parameters):
         raise AssertionError('invalid optimizer.type {}'.format(optimizer.type))
 
 
-def build_transform(transform):
-    if transform == 'noop':
-        transform = T.Compose([])
-    elif transform == 'image':
-        transform = ToImage()
-    else:
-        raise AssertionError('invalid transform {}'.format(transform))
+def build_transform(env, transforms):
+    for transform in transforms:
+        if transform.type == 'grayscale':
+            env = gym.wrappers.GrayScaleObservation(env)
+        elif transform.type == 'stack':
+            env = wrappers.StackObservation(env, k=transform.k)
+        elif transform.type == 'permute_and_normalize':
+            env = gym.wrappers.TransformObservation(env, permute_and_normalize)
+        else:
+            raise AssertionError('invalid transform.type {}'.format(transform.type))
 
-    return transform
+    return env

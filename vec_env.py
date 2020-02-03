@@ -79,10 +79,10 @@ class VecEnv(object):
 
         return state, reward, done, meta
 
-    def render(self, mode='human'):
-        self.conns[0].send((Command.RENDER, mode))
+    def render(self, mode='human', index=0):
+        self.conns[index].send((Command.RENDER, mode))
 
-        return self.conns[0].recv()
+        return self.conns[index].recv()
 
     def seed(self, seed):
         for i, conn in enumerate(self.conns):

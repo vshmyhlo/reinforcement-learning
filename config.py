@@ -2,41 +2,60 @@ from ruamel.yaml import YAML
 
 
 class CN(dict):
+    IMMUTABLE = '__immutable__'
+
     def __init__(self):
         super().__init__()
 
-        self.frozen = False
+        self[self.IMMUTABLE] = False
 
     def __getattr__(self, key):
         return self[key]
 
     def __setattr__(self, key, value):
+        assert not self[self.IMMUTABLE]
+
         self[key] = value
 
     def freeze(self):
-        assert not self.frozen
-        self.frozen = True
+        self[self.IMMUTABLE] = True
+
+        for k in self:
+            if isinstance(self[k], CN):
+                self[k].freeze()
+
+    def merge_from_config(self, config):
+        for k in config:
+            if isinstance(config[k], CN):
+                self[k].merge_from_config(config[k])
+            else:
+                self[k] = config[k]
 
     def merge_from_file(self, path):
-        return
-
         with open(path) as f:
-            config = self.build_from_dict(YAML().load(f))
-            pass
+            config = YAML().load(f)
 
-    def check_types(self, a, b):
-        pass
+        config = self.coerce(config)
+        assert isinstance(config, CN)
+        self.merge_from_config(config)
+
+    @classmethod
+    def coerce(cls, value):
+        if isinstance(value, dict):
+            return cls.build_from_dict(value)
+        elif isinstance(value, list):
+            return [cls.coerce(item) for item in value]
+        else:
+            return value
 
     @classmethod
     def build_from_dict(cls, data):
-        return
         config = CN()
 
         for k in data:
-            if isinstance(data[k], dict):
-                config[k] = cls.build_from_dict(data[k])
-            else:
-                config[k] = data[k]
+            config[k] = cls.coerce(data[k])
+
+        return config
 
 
 def build_default_config():
@@ -46,7 +65,7 @@ def build_default_config():
     config.env = 'CartPole-v0'
     config.episodes = 1000
     config.log_interval = 100
-    config.transform = 'noop'
+    config.transforms = []
     config.gamma = 0.99
     config.entropy_weight = 1e-2
     config.horizon = 8

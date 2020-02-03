@@ -13,3 +13,6 @@
 * frame stack
 * rnn-model
 * 4-frames stack
+* plot grad dist/grad norm
+* plot different losses
+* plot more metrics (from shultz presentation)

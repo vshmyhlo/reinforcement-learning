@@ -10,9 +10,19 @@ class History(object):
             'dones': None,
         }
 
-    def append(self, state=None, action=None, reward=None, done=None):
-        updates = [('states', state), ('actions', action), ('rewards', reward), ('dones', done)]
+        self.size = 0
 
+    def __len__(self):
+        return self.size
+
+    def append(self, state=None, action=None, reward=None, done=None):
+        updates = [
+            ('states', state),
+            ('actions', action),
+            ('rewards', reward),
+            ('dones', done),
+        ]
+       
         for k, v in updates:
             if v is None:
                 assert self.history[k] is None
@@ -20,6 +30,8 @@ class History(object):
             if self.history[k] is None:
                 self.history[k] = []
             self.history[k].append(v)
+
+        self.size += 1
 
     def build_rollout(self, state_prime=None):
         history = {

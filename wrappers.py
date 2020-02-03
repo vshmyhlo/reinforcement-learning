@@ -1,6 +1,9 @@
+from collections import namedtuple
+
 import gym
 import numpy as np
 import torch
+from tensorboardX import SummaryWriter
 
 
 class Torch(gym.Wrapper):
@@ -45,5 +48,88 @@ class Batch(gym.Wrapper):
         reward = np.expand_dims(np.array(reward), 0)
         done = np.expand_dims(np.array(done), 0)
         meta = [meta]
+
+        return state, reward, done, meta
+
+
+class StackObservation(gym.Wrapper):
+    def __init__(self, env, k):
+        super().__init__(env)
+
+        self.k = k
+        self.buffer = None
+        self.observation_space = gym.spaces.Box(
+            low=np.expand_dims(self.observation_space.low, -1).repeat(self.k, -1),
+            high=np.expand_dims(self.observation_space.high, -1).repeat(self.k, -1),
+            dtype=self.observation_space.dtype)
+
+    def reset(self, **kwargs):
+        self.buffer = []
+
+        state = self.env.reset()
+        self.buffer.append(state)
+
+        while len(self.buffer) < self.k:
+            state, reward, done, meta = self.env.step(self.action_space.sample())
+            self.buffer.append(state)
+
+        state = np.stack(self.buffer, -1)
+
+        return state
+
+    def step(self, action):
+        action = np.squeeze(action, 0)
+
+        state, reward, done, meta = self.env.step(action)
+        self.buffer.append(state)
+        self.buffer = self.buffer[-self.k:]
+
+        state = np.stack(self.buffer, -1)
+
+        return state, reward, done, meta
+
+
+class TensorboardBatchMonitor(gym.Wrapper):
+    Track = namedtuple('Track', ['number', 'index', 'frames'])
+
+    def __init__(self, env, log_path, log_interval):
+        super().__init__(env)
+
+        self.writer = SummaryWriter(log_path)
+        self.log_interval = log_interval
+
+        self.episodes = 0
+        self.track = None
+
+    def step(self, action):
+        state, reward, done, meta = self.env.step(action)
+
+        if self.track is not None:
+            frame = torch.tensor(self.env.render(mode='rgb_array', index=self.track.index)).permute(2, 0, 1)
+            self.track.frames.append(frame)
+
+        indices, = np.where(done)
+        for i in indices:
+            self.episodes += 1
+
+            if self.track is None:
+                if self.episodes % self.log_interval == 0:
+                    self.track = self.Track(
+                        number=self.episodes,
+                        index=i,
+                        frames=[])
+
+                    print('tracking: episode {}, index {}'.format(self.track.number, self.track.index))
+            else:
+                if i == self.track.index:
+                    print('finished: episode {}, index {}'.format(self.track.number, self.track.index))
+
+                    self.writer.add_video(
+                        'episode',
+                        torch.stack(self.track.frames, 0).unsqueeze(0),
+                        fps=24,
+                        global_step=self.track.number)
+
+                    self.track = None
 
         return state, reward, done, meta

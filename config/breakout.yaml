@@ -1,7 +1,13 @@
 env: Breakout-v0
-episodes: 30000
-log_interval: 100
-transform: image
+#env: BreakoutDeterministic-v4
+episodes: 100000
+log_interval: 200
+
+transforms:
+  - type: grayscale
+  - type: stack
+    k: 4
+  - type: permute_and_normalize
 
 model:
   size: 128
