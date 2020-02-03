@@ -71,7 +71,7 @@ def main():
         'eps': FPS(),
         'ep/length': Mean(),
         'ep/reward': Mean(),
-        'step/entropy': Mean(),
+        'rollout/entropy': Mean(),
     }
 
     # ==================================================================================================================
@@ -110,11 +110,11 @@ def main():
                     if episode % config.log_interval == 0 and episode > 0:
                         for k in metrics:
                             writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
-                        writer.add_histogram('step/action', rollout.actions, global_step=episode)
-                        writer.add_histogram('step/reward', rollout.rewards, global_step=episode)
-                        writer.add_histogram('step/return', returns, global_step=episode)
-                        writer.add_histogram('step/value', values, global_step=episode)
-                        writer.add_histogram('step/advantage', advantages, global_step=episode)
+                        writer.add_histogram('rollout/action', rollout.actions, global_step=episode)
+                        writer.add_histogram('rollout/reward', rollout.rewards, global_step=episode)
+                        writer.add_histogram('rollout/return', returns, global_step=episode)
+                        writer.add_histogram('rollout/value', values, global_step=episode)
+                        writer.add_histogram('rollout/advantage', advantages, global_step=episode)
 
                         torch.save(
                             model.state_dict(),
@@ -139,7 +139,7 @@ def main():
 
         metrics['loss'].update(loss.data.cpu().numpy())
         metrics['lr'].update(np.squeeze(scheduler.get_lr()))
-        metrics['step/entropy'].update(dist.entropy().data.cpu().numpy())
+        metrics['rollout/entropy'].update(dist.entropy().data.cpu().numpy())
 
         # training
         optimizer.zero_grad()
