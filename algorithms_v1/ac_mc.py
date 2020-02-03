@@ -11,8 +11,8 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
-from algorithms.common import build_optimizer, build_transform
-from config import build_default_config
+from algorithms_v1.common import build_optimizer, transform_env
+from algorithms_v1.config import build_default_config
 from history import History
 from model import Model
 from utils import total_discounted_return
@@ -31,8 +31,9 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 def build_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-mc')
+    parser.add_argument('--experiment-path', type=str, default='./tf_log/ac-mc')
     parser.add_argument('--config-path', type=str, required=True)
+    parser.add_argument('--restore-path', type=str)
     parser.add_argument('--no-render', action='store_true')
 
     return parser
@@ -43,6 +44,7 @@ def main():
     config = build_default_config()
     config.merge_from_file(args.config_path)
     config.experiment_path = args.experiment_path
+    config.restore_path = args.restore_path
     config.render = not args.no_render
     config.freeze()
     del args
@@ -51,17 +53,18 @@ def main():
     env = gym.make(config.env)
     if isinstance(env.action_space, gym.spaces.Box):
         env = gym.wrappers.RescaleAction(env, 0., 1.)
-    env = gym.wrappers.TransformObservation(env, build_transform(config.transform))
+    env = gym.wrappers.TransformObservation(env, transform_env(config.transform))
     env = wrappers.Batch(env)
+    if config.render:
+        env = wrappers.TensorboardBatchMonitor(env, config.experiment_path, 10)
     env = wrappers.Torch(env, device=DEVICE)
     env.seed(config.seed)
     writer = SummaryWriter(config.experiment_path)
 
-    # if args.monitor:
-    #     env = gym.wrappers.Monitor(env, os.path.join('./data', config.env), force=True)
-
     model = Model(config.model, env.observation_space, env.action_space)
     model = model.to(DEVICE)
+    if config.restore_path is not None:
+        model.load_state_dict(torch.load(config.restore_path))
     optimizer = build_optimizer(config.opt, model.parameters())
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, config.episodes)
 
@@ -79,16 +82,11 @@ def main():
     model.train()
     for episode in tqdm(range(config.episodes), desc='training'):
         history = History()
-        frames = [] if episode % config.log_interval == 0 and config.render else None
         s = env.reset()
         ep_reward = 0
 
         with torch.no_grad():
             for ep_length in itertools.count():
-                if frames is not None:
-                    frame = torch.tensor(env.render(mode='rgb_array')).permute(2, 0, 1)
-                    frames.append(frame)
-
                 a, _ = model(s.float())
                 a = a.sample()
                 s_prime, r, d, _ = env.step(a)
@@ -101,17 +99,23 @@ def main():
                     s = s_prime
 
         rollout = history.build_rollout()
-        dist, _ = model(rollout.states)
+        dist, values = model(rollout.states)
         returns = total_discounted_return(rollout.rewards, gamma=config.gamma)
 
+        # critic
+        errors = returns - values
+        critic_loss = errors**2
+
         # actor
-        advantages = returns.detach()
+        advantages = errors.detach()
         if isinstance(env.action_space, gym.spaces.Box):
             advantages = advantages.unsqueeze(-1)
         actor_loss = -(dist.log_prob(rollout.actions) * advantages)
         actor_loss -= config.entropy_weight * dist.entropy()
+        if isinstance(env.action_space, gym.spaces.Box):
+            actor_loss = actor_loss.mean(-1)
 
-        loss = actor_loss.sum(1)
+        loss = (actor_loss + critic_loss).sum(1)
 
         # training
         optimizer.zero_grad()
@@ -132,9 +136,8 @@ def main():
             writer.add_histogram('step/action', rollout.actions, global_step=episode)
             writer.add_histogram('step/reward', rollout.rewards, global_step=episode)
             writer.add_histogram('step/return', returns, global_step=episode)
+            writer.add_histogram('step/value', values, global_step=episode)
             writer.add_histogram('step/advantage', advantages, global_step=episode)
-            if frames is not None:
-                writer.add_video('episode', torch.stack(frames, 0).unsqueeze(0), fps=24, global_step=episode)
 
 
 if __name__ == '__main__':

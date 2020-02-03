@@ -12,8 +12,8 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
-from algorithms.common import build_optimizer, build_transform
-from config import build_default_config
+from algorithms_v1.common import build_optimizer, transform_env
+from algorithms_v1.config import build_default_config
 from history import History
 from model import ModelRNN
 from utils import n_step_discounted_return
@@ -50,7 +50,7 @@ def main():
     seed_torch(config.seed)
     env = wrappers.Torch(
         VecEnv([
-            lambda: build_transform(gym.make(config.env), config.transforms)
+            lambda: transform_env(gym.make(config.env), config.transforms)
             for _ in range(config.workers)]),
         device=DEVICE)
     env.seed(config.seed)

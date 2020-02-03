@@ -12,8 +12,8 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
-from algorithms.common import build_optimizer, build_transform
-from config import build_default_config
+from algorithms_v1.common import build_optimizer, transform_env
+from algorithms_v1.config import build_default_config
 from history import History
 from model import Model
 from utils import n_step_discounted_return
@@ -52,7 +52,7 @@ def main():
         VecEnv([
             lambda: gym.wrappers.TransformObservation(
                 wrappers.StackObservation(gym.make(config.env), 4),
-                build_transform(config.transform))
+                transform_env(config.transform))
             for _ in range(config.workers)]),
         device=DEVICE)
     env.seed(config.seed)

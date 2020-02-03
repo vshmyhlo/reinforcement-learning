@@ -12,8 +12,8 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
-from algorithms.common import build_optimizer, build_transform
-from config import build_default_config
+from algorithms_v1.common import build_optimizer, transform_env
+from algorithms_v1.config import build_default_config
 from history import History
 from model import Model
 from utils import n_step_discounted_return
@@ -44,14 +44,16 @@ def main():
     config.merge_from_file(args.config_path)
     config.experiment_path = args.experiment_path
     config.restore_path = args.restore_path
+    config.render = not args.no_render
     config.freeze()
     del args
 
     seed_torch(config.seed)
     env = VecEnv([
-        lambda: build_transform(gym.make(config.env), config.transforms)
+        lambda: transform_env(gym.make(config.env), config.transforms)
         for _ in range(config.workers)])
-    env = wrappers.TensorboardBatchMonitor(env, config.experiment_path, config.log_interval)
+    if config.render:
+        env = wrappers.TensorboardBatchMonitor(env, config.experiment_path, 10)
     env = wrappers.Torch(env, device=DEVICE)
     env.seed(config.seed)
     writer = SummaryWriter(config.experiment_path)
@@ -114,7 +116,6 @@ def main():
                         writer.add_histogram('step/value', values, global_step=episode)
                         writer.add_histogram('step/advantage', advantages, global_step=episode)
 
-                    if episode % 1000 == 0:
                         torch.save(
                             model.state_dict(),
                             os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))

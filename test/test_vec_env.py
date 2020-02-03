@@ -7,8 +7,10 @@ from vec_env import VecEnv
 
 class ThreeStepEnv(object):
     def __init__(self):
-        self.observation_space = object()
-        self.action_space = object()
+        self.observation_space = None
+        self.action_space = None
+        self.reward_range = None
+        self.metadata = None
         self.i = None
 
     def reset(self):
@@ -35,6 +37,7 @@ class ThreeStepEnv(object):
 
 def test_vec_env():
     env = VecEnv([lambda: ThreeStepEnv() for _ in range(3)])
+    assert env.batch_size == 3
 
     history = []
     s = env.reset()
