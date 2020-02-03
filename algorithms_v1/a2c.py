@@ -53,7 +53,7 @@ def main():
         lambda: transform_env(gym.make(config.env), config.transforms)
         for _ in range(config.workers)])
     if config.render:
-        env = wrappers.TensorboardBatchMonitor(env, config.experiment_path, 10)
+        env = wrappers.TensorboardBatchMonitor(env, config.experiment_path, 100)
     env = wrappers.Torch(env, device=DEVICE)
     env.seed(config.seed)
     writer = SummaryWriter(config.experiment_path)
