@@ -3,7 +3,6 @@ from collections import namedtuple
 import gym
 import numpy as np
 import torch
-from tensorboardX import SummaryWriter
 
 
 class Torch(gym.Wrapper):
@@ -51,6 +50,11 @@ class Batch(gym.Wrapper):
 
         return state, reward, done, meta
 
+    def render(self, mode='human', index=0):
+        assert index == 0
+
+        return self.env.render(mode=mode)
+
 
 class StackObservation(gym.Wrapper):
     def __init__(self, env, k):
@@ -92,10 +96,10 @@ class StackObservation(gym.Wrapper):
 class TensorboardBatchMonitor(gym.Wrapper):
     Track = namedtuple('Track', ['number', 'index', 'frames'])
 
-    def __init__(self, env, log_path, log_interval):
+    def __init__(self, env, writer, log_interval):
         super().__init__(env)
 
-        self.writer = SummaryWriter(log_path)
+        self.writer = writer
         self.log_interval = log_interval
 
         self.episodes = 0
@@ -105,7 +109,8 @@ class TensorboardBatchMonitor(gym.Wrapper):
         state, reward, done, meta = self.env.step(action)
 
         if self.track is not None:
-            frame = torch.tensor(self.env.render(mode='rgb_array', index=self.track.index)).permute(2, 0, 1)
+            frame = self.env.render(mode='rgb_array', index=self.track.index).copy()
+            frame = torch.tensor(frame).permute(2, 0, 1)
             self.track.frames.append(frame)
 
         indices, = np.where(done)
@@ -124,11 +129,15 @@ class TensorboardBatchMonitor(gym.Wrapper):
                 if i == self.track.index:
                     print('finished: episode {}, index {}'.format(self.track.number, self.track.index))
 
+                    fps = self.env.metadata.get('video.frames_per_second') or 24
+                    fps = min(fps, 60)
+
                     self.writer.add_video(
                         'episode',
                         torch.stack(self.track.frames, 0).unsqueeze(0),
-                        fps=24,
+                        fps=fps,
                         global_step=self.track.number)
+                    self.writer.flush()
 
                     self.track = None
 

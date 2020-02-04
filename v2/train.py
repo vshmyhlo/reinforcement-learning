@@ -12,11 +12,11 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
-from algorithms_v2.common import build_optimizer, build_transform
-from algorithms_v2.config import build_default_config
-from algorithms_v2.observable import Observable
-from algorithms_v2.rollout_callback import FiniteHorizonRolloutCallback, FullEpisodeRolloutCallback
-from model import Model
+from v2.common import build_optimizer, build_transform
+from v2.config import build_default_config
+from v2.observable import Observable
+from v2.rollout_callback import FiniteHorizonRolloutCallback, FullEpisodeRolloutCallback
+from v1.model import Model
 from utils import n_step_discounted_return
 from vec_env import VecEnv
 

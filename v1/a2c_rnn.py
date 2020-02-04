@@ -12,11 +12,11 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
-from algorithms_v1.common import build_optimizer, transform_env
-from algorithms_v1.config import build_default_config
 from history import History
-from model import ModelRNN
 from utils import n_step_discounted_return
+from v1.common import build_optimizer, transform_env
+from v1.config import build_default_config
+from v1.model import ModelRNN
 from vec_env import VecEnv
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')

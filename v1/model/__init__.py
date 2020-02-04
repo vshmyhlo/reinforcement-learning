@@ -1,9 +1,9 @@
 import gym
 from torch import nn as nn
 
-from model.layers import Activation, ConvNorm, NoOp
-from model.policy import PolicyCategorical, PolicyBeta
-from model.value_function import ValueFunction
+from v1.model import Activation, ConvNorm, NoOp
+from v1.model import PolicyCategorical, PolicyBeta
+from v1.model import ValueFunction
 
 
 class Model(nn.Module):

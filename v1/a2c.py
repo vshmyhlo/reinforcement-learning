@@ -12,11 +12,11 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
-from algorithms_v1.common import build_optimizer, transform_env
-from algorithms_v1.config import build_default_config
 from history import History
-from model import Model
 from utils import n_step_discounted_return
+from v1.common import build_optimizer, transform_env
+from v1.config import build_default_config
+from v1.model import Model
 from vec_env import VecEnv
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -38,6 +38,15 @@ def build_parser():
     return parser
 
 
+def build_env(config):
+    env = gym.make(config.env)
+    if isinstance(env.action_space, gym.spaces.Box):
+        env = gym.wrappers.RescaleAction(env, 0., 1.)
+    env = transform_env(env, config.transforms)
+
+    return env
+
+
 def main():
     args = build_parser().parse_args()
     config = build_default_config()
@@ -48,15 +57,16 @@ def main():
     config.freeze()
     del args
 
+    writer = SummaryWriter(config.experiment_path)
+
     seed_torch(config.seed)
     env = VecEnv([
-        lambda: transform_env(gym.make(config.env), config.transforms)
+        lambda: build_env(config)
         for _ in range(config.workers)])
     if config.render:
-        env = wrappers.TensorboardBatchMonitor(env, config.experiment_path, 100)
+        env = wrappers.TensorboardBatchMonitor(env, writer, config.log_interval)
     env = wrappers.Torch(env, device=DEVICE)
     env.seed(config.seed)
-    writer = SummaryWriter(config.experiment_path)
 
     model = Model(config.model, env.observation_space, env.action_space)
     model = model.to(DEVICE)
@@ -132,8 +142,12 @@ def main():
 
         # actor
         advantages = errors.detach()
+        if isinstance(env.action_space, gym.spaces.Box):
+            advantages = advantages.unsqueeze(-1)
         actor_loss = -(dist.log_prob(rollout.actions) * advantages)
         actor_loss -= config.entropy_weight * dist.entropy()
+        if isinstance(env.action_space, gym.spaces.Box):
+            actor_loss = actor_loss.mean(-1)
 
         loss = (actor_loss + critic_loss).sum(1)
 

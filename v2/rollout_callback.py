@@ -1,4 +1,4 @@
-from algorithms_v2.observable import Observable
+from v2.observable import Observable
 from history import History
 
 
