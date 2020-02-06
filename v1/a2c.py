@@ -158,7 +158,6 @@ def main():
         # training
         optimizer.zero_grad()
         loss.mean().backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 10.)  # FIXME:
         optimizer.step()
 
     bar.close()

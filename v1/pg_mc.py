@@ -12,8 +12,9 @@ from tqdm import tqdm
 
 import wrappers
 from history import History
+from transforms import apply_transforms
 from utils import total_discounted_return
-from v1.common import build_optimizer, transform_env
+from v1.common import build_optimizer
 from v1.config import build_default_config
 from v1.model import Model
 
@@ -43,7 +44,7 @@ def build_env(config):
     env = gym.make(config.env)
     if isinstance(env.action_space, gym.spaces.Box):
         env = gym.wrappers.RescaleAction(env, 0., 1.)
-    env = transform_env(env, config.transforms)
+    env = apply_transforms(env, config.transforms)
 
     return env
 

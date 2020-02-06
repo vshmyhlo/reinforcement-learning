@@ -8,6 +8,7 @@ class History(object):
             'actions': None,
             'rewards': None,
             'dones': None,
+            'hidden': None,
         }
 
         self.size = 0
@@ -15,14 +16,15 @@ class History(object):
     def __len__(self):
         return self.size
 
-    def append(self, state=None, action=None, reward=None, done=None):
+    def append(self, state=None, action=None, reward=None, done=None, hidden=None):
         updates = [
             ('states', state),
             ('actions', action),
             ('rewards', reward),
             ('dones', done),
+            ('hidden', hidden),
         ]
-       
+
         for k, v in updates:
             if v is None:
                 assert self.history[k] is None
@@ -44,13 +46,16 @@ class History(object):
             actions=history['actions'],
             rewards=history['rewards'],
             dones=history['dones'],
+            hidden=history['hidden'],
             state_prime=state_prime)
 
 
 class Rollout(object):
-    def __init__(self, states=None, actions=None, rewards=None, dones=None, state_prime=None):
+    def __init__(self, states=None, actions=None, rewards=None, dones=None, hidden=None, state_prime=None):
         self.states = states
         self.actions = actions
         self.rewards = rewards
         self.dones = dones
+        self.hidden = hidden
         self.state_prime = state_prime
+       

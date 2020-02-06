@@ -16,7 +16,7 @@ from history import History
 from utils import n_step_discounted_return
 from v1.common import build_optimizer, transform_env
 from v1.config import build_default_config
-from v1.model import ModelRNN
+from v3.model import Model
 from vec_env import VecEnv
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -38,25 +38,37 @@ def build_parser():
     return parser
 
 
+def build_env(config):
+    env = gym.make(config.env)
+    if isinstance(env.action_space, gym.spaces.Box):
+        env = gym.wrappers.RescaleAction(env, 0., 1.)
+    env = transform_env(env, config.transforms)
+
+    return env
+
+
 def main():
     args = build_parser().parse_args()
     config = build_default_config()
     config.merge_from_file(args.config_path)
     config.experiment_path = args.experiment_path
     config.restore_path = args.restore_path
+    config.render = not args.no_render
     config.freeze()
     del args
 
-    seed_torch(config.seed)
-    env = wrappers.Torch(
-        VecEnv([
-            lambda: transform_env(gym.make(config.env), config.transforms)
-            for _ in range(config.workers)]),
-        device=DEVICE)
-    env.seed(config.seed)
     writer = SummaryWriter(config.experiment_path)
 
-    model = ModelRNN(config.model, env.observation_space, env.action_space)
+    seed_torch(config.seed)
+    env = VecEnv([
+        lambda: build_env(config)
+        for _ in range(config.workers)])
+    if config.render:
+        env = wrappers.TensorboardBatchMonitor(env, writer, config.log_interval)
+    env = wrappers.Torch(env, device=DEVICE)
+    env.seed(config.seed)
+
+    model = Model(config.model, env.observation_space, env.action_space)
     model = model.to(DEVICE)
     if config.restore_path is not None:
         model.load_state_dict(torch.load(config.restore_path))
@@ -69,7 +81,7 @@ def main():
         'eps': FPS(),
         'ep/length': Mean(),
         'ep/reward': Mean(),
-        'step/entropy': Mean(),
+        'rollout/entropy': Mean(),
     }
 
     # ==================================================================================================================
@@ -82,22 +94,17 @@ def main():
     h = None
 
     bar = tqdm(total=config.episodes, desc='training')
-    frames = []
     while episode < config.episodes:
         history = History()
 
         with torch.no_grad():
             for _ in range(config.horizon):
-                if frames is not None:
-                    frame = torch.tensor(env.render(mode='rgb_array')).permute(2, 0, 1)
-                    frames.append(frame)
-
                 a, _, h_prime = model(s.float(), h)
                 a = a.sample()
                 s_prime, r, d, _ = env.step(a)
                 ep_length += 1
                 ep_reward += r
-                history.append(state=s.float(), action=a, reward=r, done=d)
+                history.append(state=s.float(), action=a, reward=r, done=d, hidden=h)
                 s = s_prime
                 h = torch.where(d, torch.zeros_like(h_prime), h_prime)
 
@@ -115,26 +122,19 @@ def main():
                     if episode % config.log_interval == 0 and episode > 0:
                         for k in metrics:
                             writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
-                        writer.add_histogram('step/action', rollout.actions, global_step=episode)
-                        writer.add_histogram('step/reward', rollout.rewards, global_step=episode)
-                        writer.add_histogram('step/return', returns, global_step=episode)
-                        writer.add_histogram('step/value', values, global_step=episode)
-                        writer.add_histogram('step/advantage', advantages, global_step=episode)
+                        writer.add_histogram('rollout/action', rollout.actions, global_step=episode)
+                        writer.add_histogram('rollout/reward', rollout.rewards, global_step=episode)
+                        writer.add_histogram('rollout/return', returns, global_step=episode)
+                        writer.add_histogram('rollout/value', values, global_step=episode)
+                        writer.add_histogram('rollout/advantage', advantages, global_step=episode)
 
-                    if episode % 1000 == 0:
                         torch.save(
                             model.state_dict(),
                             os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
 
-                    if i == 0:
-                        if frames is not None:
-                            writer.add_video(
-                                'episode', torch.stack(frames, 0).unsqueeze(0), fps=24, global_step=episode)
-                        frames = []
-
         rollout = history.build_rollout(s_prime.float())  # TODO: s or s_prime?
-        dist, values = model(rollout.states)
-        _, value_prime = model(rollout.state_prime)
+        dist, values, hidden = model(rollout.states, rollout.hidden[:, 0])
+        _, value_prime, _ = model(rollout.state_prime, hidden)
         value_prime = value_prime.detach()
         returns = n_step_discounted_return(rollout.rewards, value_prime, rollout.dones, gamma=config.gamma)
 
@@ -144,19 +144,22 @@ def main():
 
         # actor
         advantages = errors.detach()
+        if isinstance(env.action_space, gym.spaces.Box):
+            advantages = advantages.unsqueeze(-1)
         actor_loss = -(dist.log_prob(rollout.actions) * advantages)
         actor_loss -= config.entropy_weight * dist.entropy()
+        if isinstance(env.action_space, gym.spaces.Box):
+            actor_loss = actor_loss.mean(-1)
 
         loss = (actor_loss + critic_loss).sum(1)
 
         metrics['loss'].update(loss.data.cpu().numpy())
         metrics['lr'].update(np.squeeze(scheduler.get_lr()))
-        metrics['step/entropy'].update(dist.entropy().data.cpu().numpy())
+        metrics['rollout/entropy'].update(dist.entropy().data.cpu().numpy())
 
         # training
         optimizer.zero_grad()
         loss.mean().backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 10.)
         optimizer.step()
 
     bar.close()

@@ -56,6 +56,7 @@ class Batch(gym.Wrapper):
         return self.env.render(mode=mode)
 
 
+# TODO: buffer rewards
 class StackObservation(gym.Wrapper):
     def __init__(self, env, k):
         super().__init__(env)

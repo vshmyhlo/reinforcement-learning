@@ -1,23 +1,28 @@
 import gym
 from torch import nn as nn
 
-from model.encoder import GridworldEncoder, ConvEncoder, DenseEncoder
+from model.encoder import RNNEncoder, DenseEncoder, ConvEncoder, GridworldEncoder
 from model.layers import NoOp
-from v1.model.policy import PolicyCategorical, PolicyBeta
-from v1.model.value_function import ValueFunction
+from v3.model.policy import PolicyCategorical, PolicyBeta
+from v3.model.value_function import ValueFunction
+
+
+# TODO: check errors in flattening
 
 
 class Model(nn.Module):
     def __init__(self, model, state_space, action_space):
         def build_encoder():
             if model.encoder.type == 'dense':
-                return DenseEncoder(state_space, model.size)
+                encoder = DenseEncoder(state_space, model.size)
             elif model.encoder.type == 'conv':
-                return ConvEncoder(state_space, model.encoder.size, model.size)
+                encoder = ConvEncoder(state_space, model.encoder.size, model.size)
             elif model.encoder.type == 'gridworld':
-                return GridworldEncoder(state_space, model.size)
+                encoder = GridworldEncoder(state_space, model.encoder.size, model.size)
             else:
                 raise AssertionError('invalid model.encoder.type {}'.format(model.encoder.type))
+
+            return RNNEncoder(encoder, model.size, model.size)
 
         def build_policy():
             if isinstance(action_space, gym.spaces.Discrete):
@@ -45,9 +50,9 @@ class Model(nn.Module):
                 build_encoder(),
                 build_value_function())
 
-    def forward(self, input):
-        input = self.encoder(input)
+    def forward(self, input, hidden, done):
+        input, hidden = self.encoder(input, hidden, done)
         dist = self.policy(input)
         value = self.value_function(input)
 
-        return dist, value
+        return dist, value, hidden

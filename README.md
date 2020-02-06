@@ -17,3 +17,15 @@
 * plot different losses
 * plot more metrics (from shultz presentation)
 * plot mean/std
+
+* rmsprop
+* grad-clip
+* mean by time
+* remove float casts
+* refactor rollout to use s_prime at every step
+* use record episode stats
+* merge wrappers and transforms
+* make layers shared between versions
+* check all conv paddings
+* clipnorm 0.5
+* vf coef 0.5
