@@ -3,8 +3,10 @@ import os
 
 import gym
 import gym.wrappers
+import gym_minigrid
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.optim
 from all_the_tools.metrics import Mean, FPS, Last
 from all_the_tools.torch.utils import seed_torch
@@ -13,11 +15,14 @@ from tqdm import tqdm
 
 import wrappers
 from history import History
+from transforms import apply_transforms
 from utils import n_step_discounted_return
-from v1.common import build_optimizer, transform_env
+from v1.common import build_optimizer
 from v1.config import build_default_config
 from v1.model import Model
 from vec_env import VecEnv
+
+gym_minigrid
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -42,7 +47,7 @@ def build_env(config):
     env = gym.make(config.env)
     if isinstance(env.action_space, gym.spaces.Box):
         env = gym.wrappers.RescaleAction(env, 0., 1.)
-    env = transform_env(env, config.transforms)
+    env = apply_transforms(env, config.transforms)
 
     return env
 
@@ -98,12 +103,12 @@ def main():
 
         with torch.no_grad():
             for _ in range(config.horizon):
-                a, _ = model(s.float())
+                a, _ = model(s)
                 a = a.sample()
                 s_prime, r, d, _ = env.step(a)
                 ep_length += 1
                 ep_reward += r
-                history.append(state=s.float(), action=a, reward=r, done=d)
+                history.append(state=s, action=a, reward=r, done=d)
                 s = s_prime
 
                 indices, = torch.where(d)
@@ -130,7 +135,7 @@ def main():
                             model.state_dict(),
                             os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
 
-        rollout = history.build_rollout(s_prime.float())  # TODO: s or s_prime?
+        rollout = history.build_rollout(s_prime)
         dist, values = model(rollout.states)
         _, value_prime = model(rollout.state_prime)
         value_prime = value_prime.detach()
@@ -149,7 +154,7 @@ def main():
         if isinstance(env.action_space, gym.spaces.Box):
             actor_loss = actor_loss.mean(-1)
 
-        loss = (actor_loss + critic_loss).sum(1)
+        loss = (actor_loss + critic_loss * 0.5).mean(1)
 
         metrics['loss'].update(loss.data.cpu().numpy())
         metrics['lr'].update(np.squeeze(scheduler.get_lr()))
@@ -158,6 +163,7 @@ def main():
         # training
         optimizer.zero_grad()
         loss.mean().backward()
+        nn.utils.clip_grad_norm_(model.parameters(), 0.5)
         optimizer.step()
 
     bar.close()

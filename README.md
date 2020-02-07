@@ -29,3 +29,7 @@
 * check all conv paddings
 * clipnorm 0.5
 * vf coef 0.5
+* 5 step horizon
+* use activation for value prediction
+* add action to state
+* zero state as param

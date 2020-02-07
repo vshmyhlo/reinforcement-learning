@@ -78,7 +78,7 @@ class GridworldEncoder(nn.Module):
         self.conv = nn.Sequential(
             ConvNorm(base_channels * 2**0, base_channels * 2**1, 3, 2),
             Activation(),
-            ConvNorm(base_channels * 2**1, base_channels * 2**2, 3, 2),
+            ConvNorm(base_channels * 2**1, base_channels * 2**2, 3),
             Activation())
         self.output = nn.Linear(base_channels * 2**2, out_features)
 
