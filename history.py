@@ -9,6 +9,7 @@ class History(object):
             'rewards': None,
             'dones': None,
             'hidden': None,
+            'states_prime': None,
         }
 
         self.size = 0
@@ -16,13 +17,14 @@ class History(object):
     def __len__(self):
         return self.size
 
-    def append(self, state=None, action=None, reward=None, done=None, hidden=None):
+    def append(self, state=None, action=None, reward=None, done=None, hidden=None, state_prime=None):
         updates = [
             ('states', state),
             ('actions', action),
             ('rewards', reward),
             ('dones', done),
             ('hidden', hidden),
+            ('states_prime', state_prime),
         ]
 
         for k, v in updates:
@@ -35,7 +37,7 @@ class History(object):
 
         self.size += 1
 
-    def build_rollout(self, state_prime=None):
+    def build_rollout(self):
         history = {
             k: torch.stack(self.history[k], 1) if self.history[k] is not None else None
             for k in self.history
@@ -47,15 +49,14 @@ class History(object):
             rewards=history['rewards'],
             dones=history['dones'],
             hidden=history['hidden'],
-            state_prime=state_prime)
+            states_prime=history['states_prime'])
 
 
 class Rollout(object):
-    def __init__(self, states=None, actions=None, rewards=None, dones=None, hidden=None, state_prime=None):
+    def __init__(self, states=None, actions=None, rewards=None, dones=None, hidden=None, states_prime=None):
         self.states = states
         self.actions = actions
         self.rewards = rewards
         self.dones = dones
         self.hidden = hidden
-        self.state_prime = state_prime
-       
+        self.states_prime = states_prime

@@ -105,7 +105,7 @@ def main():
                 a, _ = model(s)
                 a = a.sample()
                 s_prime, r, d, meta = env.step(a)
-                history.append(state=s, action=a, reward=r, done=d)
+                history.append(state=s, action=a, reward=r, done=d, state_prime=s_prime)
                 s = s_prime
 
                 indices, = torch.where(d)
@@ -130,9 +130,9 @@ def main():
                             model.state_dict(),
                             os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
 
-        rollout = history.build_rollout(s_prime)
+        rollout = history.build_rollout()
         dist, values = model(rollout.states)
-        _, value_prime = model(rollout.state_prime)
+        _, value_prime = model(rollout.states_prime[:, -1])
         value_prime = value_prime.detach()
         returns = n_step_discounted_return(rollout.rewards, value_prime, rollout.dones, gamma=config.gamma)
 
