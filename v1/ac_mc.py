@@ -1,10 +1,11 @@
 import argparse
-import itertools
 
 import gym
 import gym.wrappers
+import gym_minigrid
 import numpy as np
 import torch
+import torch.nn as nn
 from all_the_tools.metrics import Mean, Last, FPS
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
@@ -18,16 +19,14 @@ from v1.common import build_optimizer
 from v1.config import build_default_config
 from v1.model import Model
 
+gym_minigrid
+
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 # TODO: make shared weights work
-# TODO: normalize advantage
 # TODO: train/eval
-# TODO: bn update
 # TODO: return normalization
-# TODO: monitored session
-# TODO: normalize advantage?
 
 
 def build_parser():
@@ -42,6 +41,7 @@ def build_parser():
 
 def build_env(config):
     env = gym.make(config.env)
+    env = gym.wrappers.RecordEpisodeStatistics(env)
     if isinstance(env.action_space, gym.spaces.Box):
         env = gym.wrappers.RescaleAction(env, 0., 1.)
     env = apply_transforms(env, config.transforms)
@@ -62,8 +62,7 @@ def main():
     writer = SummaryWriter(config.experiment_path)
 
     seed_torch(config.seed)
-    env = build_env(config)
-    env = wrappers.Batch(env)
+    env = wrappers.Batch(build_env(config))
     if config.render:
         env = wrappers.TensorboardBatchMonitor(env, writer, config.log_interval)
     env = wrappers.Torch(env, device=DEVICE)
@@ -82,7 +81,7 @@ def main():
         'eps': FPS(),
         'ep/length': Mean(),
         'ep/reward': Mean(),
-        'step/entropy': Mean(),
+        'rollout/entropy': Mean(),
     }
 
     # ==================================================================================================================
@@ -91,15 +90,13 @@ def main():
     for episode in tqdm(range(config.episodes), desc='training'):
         history = History()
         s = env.reset()
-        ep_reward = 0
 
         with torch.no_grad():
-            for ep_length in itertools.count():
-                a, _ = model(s.float())
+            while True:
+                a, _ = model(s)
                 a = a.sample()
-                s_prime, r, d, _ = env.step(a)
-                ep_reward += r
-                history.append(state=s.float(), action=a, reward=r)
+                s_prime, r, d, meta = env.step(a)
+                history.append(state=s, action=a, reward=r)
 
                 if d:
                     break
@@ -123,29 +120,31 @@ def main():
         if isinstance(env.action_space, gym.spaces.Box):
             actor_loss = actor_loss.mean(-1)
 
-        loss = (actor_loss + critic_loss).sum(1)
+        loss = (actor_loss + critic_loss * 0.5).mean(1)
+
+        metrics['loss'].update(loss.data.cpu().numpy())
+        metrics['lr'].update(np.squeeze(scheduler.get_lr()))
+        metrics['rollout/entropy'].update(dist.entropy().data.cpu().numpy())
 
         # training
         optimizer.zero_grad()
         loss.mean().backward()
+        nn.utils.clip_grad_norm_(model.parameters(), 0.5)
         optimizer.step()
         scheduler.step()
 
-        metrics['loss'].update(loss.data.cpu().numpy())
-        metrics['lr'].update(np.squeeze(scheduler.get_lr()))
         metrics['eps'].update(1)
-        metrics['ep/length'].update(ep_length)
-        metrics['ep/reward'].update(ep_reward.data.cpu().numpy())
-        metrics['step/entropy'].update(dist.entropy().data.cpu().numpy())
+        metrics['ep/length'].update(meta[0]['episode']['l'])
+        metrics['ep/reward'].update(meta[0]['episode']['r'])
 
         if episode % config.log_interval == 0 and episode > 0:
             for k in metrics:
                 writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
-            writer.add_histogram('step/action', rollout.actions, global_step=episode)
-            writer.add_histogram('step/reward', rollout.rewards, global_step=episode)
-            writer.add_histogram('step/return', returns, global_step=episode)
-            writer.add_histogram('step/value', values, global_step=episode)
-            writer.add_histogram('step/advantage', advantages, global_step=episode)
+            writer.add_histogram('rollout/action', rollout.actions, global_step=episode)
+            writer.add_histogram('rollout/reward', rollout.rewards, global_step=episode)
+            writer.add_histogram('rollout/return', returns, global_step=episode)
+            writer.add_histogram('rollout/value', values, global_step=episode)
+            writer.add_histogram('rollout/advantage', advantages, global_step=episode)
 
 
 if __name__ == '__main__':

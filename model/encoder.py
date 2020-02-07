@@ -100,12 +100,37 @@ class GridworldEncoder(nn.Module):
         return input
 
 
+class CustomRNNCell(nn.Module):
+    def __init__(self, features):
+        super().__init__()
+
+        self.hidden = nn.Sequential(
+            nn.Linear(features * 2, features),
+            nn.Tanh())
+        self.w = nn.Sequential(
+            nn.Linear(features * 2, features),
+            nn.Sigmoid())
+
+        nn.init.constant_(self.w[0].bias, 10.)
+
+    def forward(self, input, hidden):
+        if hidden is None:
+            hidden = torch.zeros_like(input)
+
+        cat = torch.cat([input, hidden], -1)
+        hidden = self.hidden(cat)
+        w = self.w(cat)
+
+        return w * input + (1 - w) * hidden
+
+
 class RNNEncoder(nn.Module):
     def __init__(self, encoder, in_features, out_features):
         super().__init__()
 
         self.encoder = encoder
-        self.rnn = nn.GRUCell(in_features, out_features)
+        # self.rnn = nn.GRUCell(in_features, out_features)
+        self.rnn = CustomRNNCell(in_features)
         self.output = nn.Sequential()
 
     def forward(self, input, hidden, done):

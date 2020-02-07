@@ -26,6 +26,8 @@ class CN(dict):
 
     def merge_from_config(self, config):
         for k in config:
+            assert k in self
+           
             if isinstance(config[k], CN):
                 self[k].merge_from_config(config[k])
             else:
