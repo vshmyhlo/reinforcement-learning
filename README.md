@@ -9,17 +9,12 @@
 * normalize input
 * skip-observations
 * optimize for speed
-* continious actions
-* frame stack
 * rnn-model
 * 4-frames stack
 * plot grad dist/grad norm
 * plot different losses
 * plot more metrics (from shultz presentation)
 * plot mean/std
-
-* rmsprop
-* grad-clip
 * mean by time
 * remove float casts
 * refactor rollout to use s_prime at every step
@@ -27,9 +22,14 @@
 * merge wrappers and transforms
 * make layers shared between versions
 * check all conv paddings
-* clipnorm 0.5
-* vf coef 0.5
 * 5 step horizon
 * use activation for value prediction
-* add action to state
-* zero state as param
+* add action to obs
+* advantage normalization
+* td(0)
+* exp replay
+* gae
+* td(lambda)
+* mpi
+* a3c
+* compute running mean/std of metrics

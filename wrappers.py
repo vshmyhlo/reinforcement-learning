@@ -58,10 +58,11 @@ class Batch(gym.Wrapper):
 
 # TODO: buffer rewards
 class StackObservation(gym.Wrapper):
-    def __init__(self, env, k):
+    def __init__(self, env, k, dim=-1):
         super().__init__(env)
 
         self.k = k
+        self.dim = dim
         self.buffer = None
         self.observation_space = gym.spaces.Box(
             low=np.expand_dims(self.observation_space.low, -1).repeat(self.k, -1),
@@ -78,7 +79,7 @@ class StackObservation(gym.Wrapper):
             state, reward, done, meta = self.env.step(self.action_space.sample())
             self.buffer.append(state)
 
-        state = np.stack(self.buffer, -1)
+        state = np.stack(self.buffer, self.dim)
 
         return state
 
@@ -89,13 +90,13 @@ class StackObservation(gym.Wrapper):
         self.buffer.append(state)
         self.buffer = self.buffer[-self.k:]
 
-        state = np.stack(self.buffer, -1)
+        state = np.stack(self.buffer, self.dim)
 
         return state, reward, done, meta
 
 
 class TensorboardBatchMonitor(gym.Wrapper):
-    Track = namedtuple('Track', ['number', 'index', 'frames'])
+    Track = namedtuple('Track', ['episode_number', 'index_in_batch', 'frames'])
 
     def __init__(self, env, writer, log_interval):
         super().__init__(env)
@@ -110,7 +111,7 @@ class TensorboardBatchMonitor(gym.Wrapper):
         state, reward, done, meta = self.env.step(action)
 
         if self.track is not None:
-            frame = self.env.render(mode='rgb_array', index=self.track.index).copy()
+            frame = self.env.render(mode='rgb_array', index=self.track.index_in_batch).copy()
             frame = torch.tensor(frame).permute(2, 0, 1)
             self.track.frames.append(frame)
 
@@ -121,14 +122,16 @@ class TensorboardBatchMonitor(gym.Wrapper):
             if self.track is None:
                 if self.episodes % self.log_interval == 0:
                     self.track = self.Track(
-                        number=self.episodes,
-                        index=i,
+                        episode_number=self.episodes,
+                        index_in_batch=i,
                         frames=[])
 
-                    print('tracking: episode {}, index {}'.format(self.track.number, self.track.index))
+                    print('tracking: episode_number {}, index_in_batch {}'
+                          .format(self.track.episode_number, self.track.index_in_batch))
             else:
-                if i == self.track.index:
-                    print('finished: episode {}, index {}'.format(self.track.number, self.track.index))
+                if i == self.track.index_in_batch:
+                    print('finished: episode_number {}, index_in_batch {}'
+                          .format(self.track.episode_number, self.track.index_in_batch))
 
                     fps = self.env.metadata.get('video.frames_per_second') or 24
                     fps = min(fps, 60)
@@ -137,7 +140,7 @@ class TensorboardBatchMonitor(gym.Wrapper):
                         'episode',
                         torch.stack(self.track.frames, 0).unsqueeze(0),
                         fps=fps,
-                        global_step=self.track.number)
+                        global_step=self.track.episode_number)
                     self.writer.flush()
 
                     self.track = None

@@ -5,9 +5,8 @@ import numpy as np
 import wrappers
 
 
-def permute_and_normalize(input):
+def permute(input):
     input = np.moveaxis(input, 2, 0)
-    input = normalize(input)
 
     return input
 
@@ -30,12 +29,14 @@ def apply_transforms(env, transforms):
         if transform.type == 'grayscale':
             env = gym.wrappers.GrayScaleObservation(env)
         elif transform.type == 'stack':
-            env = wrappers.StackObservation(env, k=transform.k)
-        elif transform.type == 'permute_and_normalize':
-            env = gym.wrappers.TransformObservation(env, permute_and_normalize)
+            env = wrappers.StackObservation(env, k=transform.k, dim=transform.dim)
+        elif transform.type == 'permute':
+            env = gym.wrappers.TransformObservation(env, permute)
+        elif transform.type == 'normalize':
+            env = gym.wrappers.TransformObservation(env, normalize)
         elif transform.type == 'gridworld':
             env = gym.wrappers.TransformObservation(env, gridworld)
-        if transform.type == 'float':
+        elif transform.type == 'float':
             env = gym.wrappers.TransformObservation(env, lambda s: s.astype(np.float32))
         else:
             raise AssertionError('invalid transform.type {}'.format(transform.type))

@@ -51,3 +51,31 @@ class Model(nn.Module):
         value = self.value_function(input)
 
         return dist, value
+
+
+class ModelTMP(nn.Module):
+    def __init__(self, model, state_space, action_space):
+        def build_encoder():
+            if model.encoder.type == 'dense':
+                return DenseEncoder(state_space, model.size)
+            elif model.encoder.type == 'conv':
+                return ConvEncoder(state_space, model.encoder.size, model.size)
+            elif model.encoder.type == 'gridworld':
+                return GridworldEncoder(state_space, model.size)
+            else:
+                raise AssertionError('invalid model.encoder.type {}'.format(model.encoder.type))
+
+        def build_action_value_functoin():
+            return nn.Sequential(
+                nn.Linear(model.size, action_space.n))
+
+        super().__init__()
+
+        self.encoder = build_encoder()
+        self.action_value_function = build_action_value_functoin()
+
+    def forward(self, input):
+        input = self.encoder(input)
+        action_value = self.action_value_function(input)
+
+        return action_value

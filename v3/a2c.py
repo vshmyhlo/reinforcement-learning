@@ -27,7 +27,6 @@ gym_minigrid
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-# TODO: torch wrapper
 # TODO: revisit stat calculation
 # TODO: normalize advantage?
 # TODO: normalize input (especially images)
@@ -43,8 +42,10 @@ def build_parser():
     return parser
 
 
+# TODO: move to shared code
 def build_env(config):
     env = gym.make(config.env)
+    env = gym.wrappers.RecordEpisodeStatistics(env)
     if isinstance(env.action_space, gym.spaces.Box):
         env = gym.wrappers.RescaleAction(env, 0., 1.)
     env = apply_transforms(env, config.transforms)
@@ -93,8 +94,6 @@ def main():
     # training loop
     model.train()
     episode = 0
-    ep_length = torch.zeros(config.workers, device=DEVICE)
-    ep_reward = torch.zeros(config.workers, device=DEVICE)
     s = env.reset()
     h = None
 
@@ -106,20 +105,16 @@ def main():
             for _ in range(config.horizon):
                 a, _, h_prime = model(s, h, None)
                 a = a.sample()
-                s_prime, r, d, _ = env.step(a)
-                ep_length += 1
-                ep_reward += r
-                history.append(state=s, action=a, reward=r, done=d, hidden=h)
+                s_prime, r, d, meta = env.step(a)
+                history.append(state=s, action=a, reward=r, done=d, hidden=h, state_prime=s_prime)
                 s = s_prime
                 h = torch.where(d.unsqueeze(-1), torch.zeros_like(h_prime), h_prime)
 
                 indices, = torch.where(d)
                 for i in indices:
                     metrics['eps'].update(1)
-                    metrics['ep/length'].update(ep_length[i].data.cpu().numpy())
-                    metrics['ep/reward'].update(ep_reward[i].data.cpu().numpy())
-                    ep_length[i] = 0
-                    ep_reward[i] = 0
+                    metrics['ep/length'].update(meta[i]['episode']['l'])
+                    metrics['ep/reward'].update(meta[i]['episode']['r'])
                     episode += 1
                     scheduler.step()
                     bar.update(1)
@@ -137,10 +132,11 @@ def main():
                             model.state_dict(),
                             os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
 
-        rollout = history.build_rollout(s_prime)
+        rollout = history.build_rollout()
         dist, values, hidden = model(rollout.states, rollout.hidden[:, 0], rollout.dones)
-        _, value_prime, _ = model(rollout.state_prime, hidden, None)
-        value_prime = value_prime.detach()
+        with torch.no_grad():
+            _, value_prime, _ = model(rollout.states_prime[:, -1], hidden, None)
+            value_prime = value_prime.detach()
         returns = n_step_discounted_return(rollout.rewards, value_prime, rollout.dones, gamma=config.gamma)
 
         # critic
