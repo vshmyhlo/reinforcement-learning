@@ -2,7 +2,7 @@ from all_the_tools.config import Config as C
 
 config = C(
     seed=42,
-    env='CartPole-v1',
+    env='Hopper-v2',
     episodes=10000,
     log_interval=100,
     transforms=[],

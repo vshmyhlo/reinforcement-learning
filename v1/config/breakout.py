@@ -1,10 +1,10 @@
-from config import Config as C
+from all_the_tools.config import Config as C
 
 config = C(
     seed=42,
     env='Breakout-v0',
     episodes=100000,
-    log_interval=200,
+    log_interval=100,
     transforms=[
         C(type='grayscale'),
         C(type='stack', k=4, dim=0),
@@ -16,10 +16,10 @@ config = C(
     horizon=8,
     workers=32,
     model=C(
-        size=128,
         encoder=C(
             type='conv',
-            size=16,
+            base_channels=16,
+            out_features=128,
             shared=True)),
     opt=C(
         type='adam',
