@@ -30,6 +30,8 @@ def apply_transforms(env, transforms):
             env = gym.wrappers.GrayScaleObservation(env)
         elif transform.type == 'stack':
             env = wrappers.StackObservation(env, k=transform.k, dim=transform.dim)
+        elif transform.type == 'skip':
+            env = wrappers.SkipObservation(env, k=transform.k)
         elif transform.type == 'permute':
             env = gym.wrappers.TransformObservation(env, permute)
         elif transform.type == 'normalize':

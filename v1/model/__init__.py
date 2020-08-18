@@ -1,7 +1,7 @@
 import gym
 from torch import nn as nn
 
-from model.encoder import GridworldEncoder, ConvEncoder, DenseEncoder
+from model.encoder import GridworldEncoder, ConvEncoder, FCEncoder
 from model.layers import NoOp
 from v1.model.policy import PolicyCategorical, PolicyBeta
 from v1.model.value_function import ValueFunction
@@ -10,25 +10,25 @@ from v1.model.value_function import ValueFunction
 class Model(nn.Module):
     def __init__(self, model, state_space, action_space):
         def build_encoder():
-            if model.encoder.type == 'dense':
-                return DenseEncoder(state_space, model.size)
+            if model.encoder.type == 'fc':
+                return FCEncoder(state_space, model.encoder.out_features)
             elif model.encoder.type == 'conv':
-                return ConvEncoder(state_space, model.encoder.size, model.size)
-            elif model.encoder.type == 'gridworld':
-                return GridworldEncoder(state_space, model.size)
+                return ConvEncoder(state_space, model.encoder.base_channels, model.encoder.out_features)
+            # elif model.encoder.type == 'gridworld':
+            #     return GridworldEncoder(state_space, model.size)
             else:
                 raise AssertionError('invalid model.encoder.type {}'.format(model.encoder.type))
 
         def build_policy():
             if isinstance(action_space, gym.spaces.Discrete):
-                return PolicyCategorical(model.size, action_space)
+                return PolicyCategorical(model.encoder.out_features, action_space)
             elif isinstance(action_space, gym.spaces.Box):
-                return PolicyBeta(model.size, action_space)
+                return PolicyBeta(model.encoder.out_features, action_space)
             else:
                 raise AssertionError('invalid action_space {}'.format(action_space))
 
         def build_value_function():
-            return ValueFunction(model.size)
+            return ValueFunction(model.encoder.out_features)
 
         super().__init__()
 
@@ -57,7 +57,7 @@ class ModelTMP(nn.Module):
     def __init__(self, model, state_space, action_space):
         def build_encoder():
             if model.encoder.type == 'dense':
-                return DenseEncoder(state_space, model.size)
+                return FCEncoder(state_space, model.size)
             elif model.encoder.type == 'conv':
                 return ConvEncoder(state_space, model.encoder.size, model.size)
             elif model.encoder.type == 'gridworld':

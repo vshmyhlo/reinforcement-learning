@@ -1,13 +1,13 @@
-import argparse
 import os
 
+import click
 import gym
 import gym.wrappers
-import gym_minigrid
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim
+from all_the_tools.config import load_config
 from all_the_tools.metrics import Mean, FPS, Last
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
@@ -18,11 +18,8 @@ from history import History
 from transforms import apply_transforms
 from utils import n_step_discounted_return
 from v1.common import build_optimizer
-from v1.config import build_default_config
 from v1.model import Model
 from vec_env import VecEnv
-
-gym_minigrid
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -32,36 +29,29 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 # TODO: normalize input (especially images)
 
 
-def build_parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-mc')
-    parser.add_argument('--config-path', type=str, required=True)
-    parser.add_argument('--restore-path', type=str)
-    parser.add_argument('--no-render', action='store_true')
-
-    return parser
-
-
 # TODO: move to shared code
 def build_env(config):
     env = gym.make(config.env)
     env = gym.wrappers.RecordEpisodeStatistics(env)
     if isinstance(env.action_space, gym.spaces.Box):
+        print(env.action_space)
+        fail
         env = gym.wrappers.RescaleAction(env, 0., 1.)
     env = apply_transforms(env, config.transforms)
 
     return env
 
 
-def main():
-    args = build_parser().parse_args()
-    config = build_default_config()
-    config.merge_from_file(args.config_path)
-    config.experiment_path = args.experiment_path
-    config.restore_path = args.restore_path
-    config.render = not args.no_render
-    config.freeze()
-    del args
+@click.command()
+@click.option('--config-path', type=click.Path(), required=True)
+@click.option('--experiment-path', type=click.Path(), required=True)
+@click.option('--restore-path', type=click.Path())
+@click.option('--render', is_flag=True)
+def main(config_path, **kwargs):
+    config = load_config(
+        config_path,
+        **kwargs)
+    del config_path, kwargs
 
     writer = SummaryWriter(config.experiment_path)
 
@@ -71,7 +61,7 @@ def main():
         for _ in range(config.workers)])
     if config.render:
         env = wrappers.TensorboardBatchMonitor(env, writer, config.log_interval)
-    env = wrappers.Torch(env, device=DEVICE)
+    env = wrappers.Torch(env, dtype=torch.float, device=DEVICE)
     env.seed(config.seed)
 
     model = Model(config.model, env.observation_space, env.action_space)
@@ -129,7 +119,7 @@ def main():
                         torch.save(
                             model.state_dict(),
                             os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
-                      
+
         rollout = history.build_rollout()
         dist, values = model(rollout.states)
         with torch.no_grad():

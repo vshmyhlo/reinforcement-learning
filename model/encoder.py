@@ -4,7 +4,7 @@ import torch.nn as nn
 from model.layers import ConvNorm, Activation
 
 
-class DenseEncoder(nn.Module):
+class FCEncoder(nn.Module):
     def __init__(self, state_space, out_features):
         assert len(state_space.shape) == 1
 

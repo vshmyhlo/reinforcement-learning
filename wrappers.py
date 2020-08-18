@@ -6,15 +6,16 @@ import torch
 
 
 class Torch(gym.Wrapper):
-    def __init__(self, env, device):
+    def __init__(self, env, dtype, device):
         super().__init__(env)
 
+        self.dtype = dtype
         self.device = device
 
     def reset(self):
         state = self.env.reset()
 
-        state = torch.tensor(state, device=self.device)
+        state = torch.tensor(state, dtype=self.dtype, device=self.device)
 
         return state
 
@@ -23,7 +24,7 @@ class Torch(gym.Wrapper):
 
         state, reward, done, meta = self.env.step(action)
 
-        state = torch.tensor(state, device=self.device)
+        state = torch.tensor(state, dtype=self.dtype, device=self.device)
         reward = torch.tensor(reward, dtype=torch.float, device=self.device)
         done = torch.tensor(done, dtype=torch.bool, device=self.device)
 
@@ -84,8 +85,6 @@ class StackObservation(gym.Wrapper):
         return state
 
     def step(self, action):
-        action = np.squeeze(action, 0)
-
         state, reward, done, meta = self.env.step(action)
         self.buffer.append(state)
         self.buffer = self.buffer[-self.k:]
@@ -93,6 +92,25 @@ class StackObservation(gym.Wrapper):
         state = np.stack(self.buffer, self.dim)
 
         return state, reward, done, meta
+
+
+# TODO: what to do with render?
+class SkipObservation(gym.Wrapper):
+    def __init__(self, env, k):
+        super().__init__(env)
+
+        self.k = k
+
+    def step(self, action):
+        reward_buffer = 0
+        for _ in range(self.k):
+            state, reward, done, meta = self.env.step(action)
+            reward_buffer += reward
+
+            if done:
+                break
+
+        return state, reward_buffer, done, meta
 
 
 class TensorboardBatchMonitor(gym.Wrapper):
