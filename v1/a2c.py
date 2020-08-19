@@ -24,6 +24,7 @@ from vec_env import VecEnv
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
+# TODO: check how finished episodes count
 # TODO: revisit stat calculation
 # TODO: normalize advantage?
 # TODO: normalize input (especially images)
