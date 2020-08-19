@@ -13,6 +13,7 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
+import wrappers.torch
 from history import History
 from transforms import apply_transforms
 from utils import one_step_discounted_return
@@ -82,7 +83,7 @@ def main():
         for _ in range(config.workers)])
     if config.render:
         env = wrappers.TensorboardBatchMonitor(env, writer, config.log_interval)
-    env = wrappers.Torch(env, device=DEVICE)
+    env = wrappers.torch.Torch(env, device=DEVICE)
     env.seed(config.seed)
 
     policy_model = ModelTMP(config.model, env.observation_space, env.action_space).to(DEVICE)

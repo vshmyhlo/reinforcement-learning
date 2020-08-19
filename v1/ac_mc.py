@@ -12,6 +12,7 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
+import wrappers.torch
 from history import History
 from transforms import apply_transforms
 from utils import total_discounted_return
@@ -65,7 +66,7 @@ def main():
     env = wrappers.Batch(build_env(config))
     if config.render:
         env = wrappers.TensorboardBatchMonitor(env, writer, config.log_interval)
-    env = wrappers.Torch(env, device=DEVICE)
+    env = wrappers.torch.Torch(env, device=DEVICE)
     env.seed(config.seed)
 
     model = Model(config.model, env.observation_space, env.action_space)

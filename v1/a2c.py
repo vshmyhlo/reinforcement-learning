@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.optim
 from all_the_tools.config import load_config
-from all_the_tools.metrics import Mean, FPS, Last
+from all_the_tools.metrics import Mean, Last
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -75,7 +75,7 @@ def main(config_path, **kwargs):
     metrics = {
         'loss': Mean(),
         'lr': Last(),
-        'eps': FPS(),
+        'ep/time': Mean(),
         'ep/length': Mean(),
         'ep/reward': Mean(),
         'rollout/entropy': Mean(),
@@ -101,7 +101,7 @@ def main(config_path, **kwargs):
 
                 indices, = torch.where(d)
                 for i in indices:
-                    metrics['eps'].update(1)
+                    metrics['ep/time'].update(meta[i]['episode']['t'])
                     metrics['ep/length'].update(meta[i]['episode']['l'])
                     metrics['ep/reward'].update(meta[i]['episode']['r'])
                     episode += 1
