@@ -2,7 +2,6 @@ import gym
 import numpy as np
 
 
-# TODO: buffer rewards
 class StackObservation(gym.Wrapper):
     def __init__(self, env, k, dim=-1):
         super().__init__(env)
@@ -18,22 +17,22 @@ class StackObservation(gym.Wrapper):
     def reset(self, **kwargs):
         self.buffer = []
 
-        state = self.env.reset()
-        self.buffer.append(state)
+        obs = self.env.reset()
+        self.buffer.append(obs)
 
         while len(self.buffer) < self.k:
-            state, reward, done, meta = self.env.step(self.action_space.sample())
-            self.buffer.append(state)
+            obs, reward, done, meta = self.env.step(self.action_space.sample())
+            self.buffer.append(obs)
 
-        state = np.stack(self.buffer, self.dim)
+        obs = np.stack(self.buffer, self.dim)
 
-        return state
+        return obs
 
     def step(self, action):
-        state, reward, done, meta = self.env.step(action)
-        self.buffer.append(state)
+        obs, reward, done, info = self.env.step(action)
+        self.buffer.append(obs)
         self.buffer = self.buffer[-self.k:]
 
-        state = np.stack(self.buffer, self.dim)
+        obs = np.stack(self.buffer, self.dim)
 
-        return state, reward, done, meta
+        return obs, reward, done, info

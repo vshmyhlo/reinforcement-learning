@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.optim
 from all_the_tools.config import load_config
-from all_the_tools.metrics import Mean, Last
+from all_the_tools.metrics import Mean, Last, FPS
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -75,7 +75,7 @@ def main(config_path, **kwargs):
     metrics = {
         'loss': Mean(),
         'lr': Last(),
-        'ep/time': Mean(),
+        'eps': FPS(),
         'ep/length': Mean(),
         'ep/reward': Mean(),
         'rollout/entropy': Mean(),
@@ -95,15 +95,15 @@ def main(config_path, **kwargs):
             for _ in range(config.horizon):
                 a, _ = model(s)
                 a = a.sample()
-                s_prime, r, d, meta = env.step(a)
+                s_prime, r, d, info = env.step(a)
                 history.append(state=s, action=a, reward=r, done=d, state_prime=s_prime)
                 s = s_prime
 
                 indices, = torch.where(d)
                 for i in indices:
-                    metrics['ep/time'].update(meta[i]['episode']['t'])
-                    metrics['ep/length'].update(meta[i]['episode']['l'])
-                    metrics['ep/reward'].update(meta[i]['episode']['r'])
+                    metrics['eps'].update(1)
+                    metrics['ep/length'].update(info[i]['episode']['l'])
+                    metrics['ep/reward'].update(info[i]['episode']['r'])
                     episode += 1
                     scheduler.step()
                     bar.update(1)
