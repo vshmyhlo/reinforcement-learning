@@ -26,7 +26,9 @@ def gridworld(input):
 
 def apply_transforms(env, transforms):
     for transform in transforms:
-        if transform.type == 'grayscale':
+        if transform.type == 'adj_max':
+            env = wrappers.AdjMax(env)
+        elif transform.type == 'grayscale':
             env = gym.wrappers.GrayScaleObservation(env)
         elif transform.type == 'stack':
             env = wrappers.StackObservation(env, k=transform.k, dim=transform.dim)

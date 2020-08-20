@@ -6,7 +6,9 @@ config = C(
     episodes=100000,
     log_interval=100,
     transforms=[
+        C(type='adj_max'),
         C(type='grayscale'),
+        C(type='resize', size=84),
         C(type='stack', k=4, dim=0),
         # C(type='skip', k=4),
         C(type='normalize'),

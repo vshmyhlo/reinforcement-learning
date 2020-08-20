@@ -34,10 +34,10 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 def build_env(config):
     env = gym.make(config.env)
     env = gym.wrappers.RecordEpisodeStatistics(env)
-    if isinstance(env.action_space, gym.spaces.Box):
-        print(env.action_space)
-        fail
-        env = gym.wrappers.RescaleAction(env, 0., 1.)
+    # if isinstance(env.action_space, gym.spaces.Box):
+    #     print(env.action_space)
+    #     fail
+    #     env = gym.wrappers.RescaleAction(env, 0., 1.)
     env = apply_transforms(env, config.transforms)
 
     return env
@@ -133,15 +133,16 @@ def main(config_path, **kwargs):
 
         # actor
         advantages = errors.detach()
-        if isinstance(env.action_space, gym.spaces.Box):
-            advantages = advantages.unsqueeze(-1)
+        # if isinstance(env.action_space, gym.spaces.Box):
+        #     advantages = advantages.unsqueeze(-1)
+
         actor_loss = -dist.log_prob(rollout.actions) * advantages - \
                      config.entropy_weight * dist.entropy()
-        if isinstance(env.action_space, gym.spaces.Box):
-            actor_loss = actor_loss.mean(-1)
-          
+        # if isinstance(env.action_space, gym.spaces.Box):
+        #     actor_loss = actor_loss.mean(-1)
+
         # loss
-        loss = (actor_loss + critic_loss * 0.5).mean(1)
+        loss = (actor_loss + 0.5 * critic_loss).mean(1)
 
         metrics['loss'].update(loss.data.cpu().numpy())
         metrics['lr'].update(np.squeeze(scheduler.get_lr()))

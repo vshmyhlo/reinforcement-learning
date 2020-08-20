@@ -1,3 +1,4 @@
+from wrappers.adj_max import AdjMax
 from wrappers.batch import Batch
 from wrappers.skip_observation import SkipObservation
 from wrappers.stack_observation import StackObservation
