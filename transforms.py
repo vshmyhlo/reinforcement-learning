@@ -38,8 +38,6 @@ def apply_transforms(env, transforms):
             env = gym.wrappers.TransformObservation(env, normalize)
         elif transform.type == 'gridworld':
             env = gym.wrappers.TransformObservation(env, gridworld)
-        elif transform.type == 'float':
-            env = gym.wrappers.TransformObservation(env, lambda s: s.astype(np.float32))
         else:
             raise AssertionError('invalid transform.type {}'.format(transform.type))
 

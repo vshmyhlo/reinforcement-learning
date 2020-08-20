@@ -19,7 +19,7 @@ from transforms import apply_transforms
 from utils import one_step_discounted_return
 from v1.common import build_optimizer
 from v1.config import build_default_config
-from v1.model import ModelTMP
+from v1.model import ModelDQN
 from vec_env import VecEnv
 
 gym_minigrid
@@ -86,8 +86,8 @@ def main():
     env = wrappers.torch.Torch(env, device=DEVICE)
     env.seed(config.seed)
 
-    policy_model = ModelTMP(config.model, env.observation_space, env.action_space).to(DEVICE)
-    target_model = ModelTMP(config.model, env.observation_space, env.action_space).to(DEVICE)
+    policy_model = ModelDQN(config.model, env.observation_space, env.action_space).to(DEVICE)
+    target_model = ModelDQN(config.model, env.observation_space, env.action_space).to(DEVICE)
     target_model.load_state_dict(policy_model.state_dict())
     optimizer = build_optimizer(config.opt, policy_model.parameters())
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, config.episodes)

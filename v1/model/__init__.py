@@ -53,7 +53,8 @@ class Model(nn.Module):
         return dist, value
 
 
-class ModelTMP(nn.Module):
+# TODO: refactor
+class ModelDQN(nn.Module):
     def __init__(self, model, state_space, action_space):
         def build_encoder():
             if model.encoder.type == 'dense':

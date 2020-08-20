@@ -23,11 +23,11 @@ def test_n_step_discounted_return():
     actual = utils.n_step_discounted_return(rewards, value_prime, dones, gamma=0.9)
 
     expected = torch.tensor([[
-        1 + 0.9 * 2,
-        2,
-        3 + 0.9 * 4,
+        2.8,
+        2.,
+        6.6,
     ]])
-
+  
     assert torch.allclose(actual, expected)
 
 

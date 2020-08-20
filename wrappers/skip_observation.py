@@ -11,10 +11,10 @@ class SkipObservation(gym.Wrapper):
     def step(self, action):
         reward_buffer = 0
         for _ in range(self.k):
-            state, reward, done, meta = self.env.step(action)
+            obs, reward, done, info = self.env.step(action)
             reward_buffer += reward
 
             if done:
                 break
 
-        return state, reward_buffer, done, meta
+        return obs, reward_buffer, done, info

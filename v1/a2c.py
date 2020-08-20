@@ -125,8 +125,7 @@ def main(config_path, **kwargs):
         dist, values = model(rollout.states)
         with torch.no_grad():
             _, value_prime = model(rollout.states_prime[:, -1])
-            value_prime = value_prime.detach()
-        returns = n_step_discounted_return(rollout.rewards, value_prime, rollout.dones, gamma=config.gamma)
+            returns = n_step_discounted_return(rollout.rewards, value_prime, rollout.dones, gamma=config.gamma)
 
         # critic
         errors = returns - values
@@ -136,11 +135,12 @@ def main(config_path, **kwargs):
         advantages = errors.detach()
         if isinstance(env.action_space, gym.spaces.Box):
             advantages = advantages.unsqueeze(-1)
-        actor_loss = -(dist.log_prob(rollout.actions) * advantages)
-        actor_loss -= config.entropy_weight * dist.entropy()
+        actor_loss = -dist.log_prob(rollout.actions) * advantages - \
+                     config.entropy_weight * dist.entropy()
         if isinstance(env.action_space, gym.spaces.Box):
             actor_loss = actor_loss.mean(-1)
-
+          
+        # loss
         loss = (actor_loss + critic_loss * 0.5).mean(1)
 
         metrics['loss'].update(loss.data.cpu().numpy())
