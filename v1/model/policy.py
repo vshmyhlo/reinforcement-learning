@@ -9,7 +9,7 @@ class PolicyCategorical(nn.Module):
         super().__init__()
 
         self.layers = nn.Linear(in_features, action_space.n)
-       
+
     def forward(self, input):
         input = self.layers(input)
         dist = torch.distributions.Categorical(logits=input)

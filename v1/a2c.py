@@ -4,6 +4,7 @@ import click
 import gym
 import gym.wrappers
 import numpy as np
+import pybulletgym
 import torch
 import torch.nn as nn
 import torch.optim
@@ -21,6 +22,8 @@ from v1.common import build_optimizer
 from v1.model import Model
 from vec_env import VecEnv
 
+pybulletgym
+
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
@@ -29,16 +32,16 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 # TODO: normalize advantage?
 # TODO: normalize input (especially images)
 # TODO: refactor EPS (noisy and incorrect statistics)
+# TODO: sum or average entropy of each action
 
 
 # TODO: move to shared code
 def build_env(config):
     env = gym.make(config.env)
     env = gym.wrappers.RecordEpisodeStatistics(env)
-    # if isinstance(env.action_space, gym.spaces.Box):
-    #     print(env.action_space)
-    #     fail
-    #     env = gym.wrappers.RescaleAction(env, 0., 1.)
+    if isinstance(env.action_space, gym.spaces.Box):
+        assert env.action_space.is_bounded()
+        env = gym.wrappers.RescaleAction(env, 0., 1.)
     env = apply_transforms(env, config.transforms)
 
     return env
@@ -134,13 +137,16 @@ def main(config_path, **kwargs):
 
         # actor
         advantages = errors.detach()
-        # if isinstance(env.action_space, gym.spaces.Box):
-        #     advantages = advantages.unsqueeze(-1)
+        log_prob = dist.log_prob(rollout.actions)
+        entropy = dist.entropy()
 
-        actor_loss = -dist.log_prob(rollout.actions) * advantages - \
-                     config.entropy_weight * dist.entropy()
-        # if isinstance(env.action_space, gym.spaces.Box):
-        #     actor_loss = actor_loss.mean(-1)
+        if isinstance(env.action_space, gym.spaces.Box):
+            log_prob = log_prob.sum(-1)
+            entropy = entropy.sum(-1)
+        assert log_prob.dim() == entropy.dim() == 2
+
+        actor_loss = -log_prob * advantages - \
+                     config.entropy_weight * entropy
 
         # loss
         loss = (actor_loss + 0.5 * critic_loss).mean(1)
