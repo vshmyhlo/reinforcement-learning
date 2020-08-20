@@ -1,3 +1,6 @@
+from functools import partial
+
+import cv2
 import gym.wrappers
 import numba
 import numpy as np
@@ -20,6 +23,14 @@ def normalize(input):
     return input
 
 
+def resize(input, size):
+    if isinstance(size, int):
+        size = (size, size)
+    input = cv2.resize(input, size)
+
+    return input
+
+
 def gridworld(input):
     return input['image'][:, :, 0].astype(np.int64)
 
@@ -30,6 +41,8 @@ def apply_transforms(env, transforms):
             env = wrappers.AdjMax(env)
         elif transform.type == 'grayscale':
             env = gym.wrappers.GrayScaleObservation(env)
+        elif transform.type == 'resize':
+            env = gym.wrappers.TransformObservation(env, partial(resize, size=transform.size))
         elif transform.type == 'stack':
             env = wrappers.StackObservation(env, k=transform.k, dim=transform.dim)
         elif transform.type == 'skip':

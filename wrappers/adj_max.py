@@ -7,7 +7,7 @@ class AdjMax(gym.Wrapper):
         super().__init__(env)
 
         self.obs = None
-       
+
     def reset(self, **kwargs):
         self.obs = self.env.reset()
 
