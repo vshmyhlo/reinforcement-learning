@@ -28,6 +28,7 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 # TODO: revisit stat calculation
 # TODO: normalize advantage?
 # TODO: normalize input (especially images)
+# TODO: refactor EPS (noisy and incorrect statistics)
 
 
 # TODO: move to shared code
