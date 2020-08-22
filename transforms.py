@@ -44,9 +44,9 @@ def apply_transforms(env, transforms):
         elif transform.type == 'resize':
             env = gym.wrappers.TransformObservation(env, partial(resize, size=transform.size))
         elif transform.type == 'stack':
-            env = wrappers.StackObservation(env, k=transform.k, dim=transform.dim)
+            env = wrappers.StackObs(env, k=transform.k, dim=transform.dim)
         elif transform.type == 'skip':
-            env = wrappers.SkipObservation(env, k=transform.k)
+            env = wrappers.SkipObs(env, k=transform.k)
         elif transform.type == 'permute':
             env = gym.wrappers.TransformObservation(env, permute)
         elif transform.type == 'normalize':

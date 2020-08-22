@@ -15,7 +15,7 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
-from history import History
+from history_v2 import History
 from transforms import apply_transforms
 from utils import n_step_discounted_return
 from v1.common import build_optimizer
@@ -83,25 +83,29 @@ def main(config_path, **kwargs):
         'ep/length': Mean(),
         'ep/return': Mean(),
         'rollout/entropy': Mean(),
+        'rollout/reward': Mean(),
+        'rollout/value': Mean(),
+        'rollout/advantage': Mean(),
     }
 
     # ==================================================================================================================
     # training loop
     model.train()
     episode = 0
-    s = env.reset()
+    s, h = env.reset(), model.zero_state(config.workers)
+    d = None
 
     bar = tqdm(total=config.episodes, desc='training')
     while episode < config.episodes:
-        history = History()
+        history = History(['state', 'hidden', 'action', 'reward', 'done', 'state_prime'])
 
         with torch.no_grad():
             for _ in range(config.horizon):
-                a, _ = model(s)
+                a, _, h_prime = model(s, h, d)
                 a = a.sample()
                 s_prime, r, d, info = env.step(a)
-                history.append(state=s, action=a, reward=r, done=d, state_prime=s_prime)
-                s = s_prime
+                history.append(state=s, hidden=h, action=a, reward=r, done=d, state_prime=s_prime)
+                s, h = s_prime, h_prime
 
                 indices, = torch.where(d)
                 for i in indices:
@@ -115,45 +119,19 @@ def main(config_path, **kwargs):
                     if episode % config.log_interval == 0 and episode > 0:
                         for k in metrics:
                             writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
-                        writer.add_histogram('rollout/action', rollout.actions, global_step=episode)
-                        writer.add_histogram('rollout/reward', rollout.rewards, global_step=episode)
-                        writer.add_histogram('rollout/return', returns, global_step=episode)
-                        writer.add_histogram('rollout/value', values, global_step=episode)
-                        writer.add_histogram('rollout/advantage', advantages, global_step=episode)
-
                         torch.save(
                             model.state_dict(),
                             os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
 
+        # build rollout
         rollout = history.build_rollout()
-        dist, values = model(rollout.states)
-        with torch.no_grad():
-            _, value_prime = model(rollout.states_prime[:, -1])
-            returns = n_step_discounted_return(rollout.rewards, value_prime, rollout.dones, gamma=config.gamma)
-
-        # critic
-        errors = returns - values
-        critic_loss = errors**2
-
-        # actor
-        advantages = errors.detach()
-        log_prob = dist.log_prob(rollout.actions)
-        entropy = dist.entropy()
-
-        if isinstance(env.action_space, gym.spaces.Box):
-            log_prob = log_prob.sum(-1)
-            entropy = entropy.sum(-1)
-        assert log_prob.dim() == entropy.dim() == 2
-
-        actor_loss = -log_prob * advantages - \
-                     config.entropy_weight * entropy
 
         # loss
-        loss = (actor_loss + 0.5 * critic_loss).mean(1)
+        loss = compute_loss(model, rollout, metrics, config)
 
+        # metrics
         metrics['loss'].update(loss.data.cpu().numpy())
         metrics['lr'].update(np.squeeze(scheduler.get_lr()))
-        metrics['rollout/entropy'].update(dist.entropy().data.cpu().numpy())
 
         # training
         optimizer.zero_grad()
@@ -163,6 +141,36 @@ def main(config_path, **kwargs):
 
     bar.close()
     env.close()
+
+
+def compute_loss(model, rollout, metrics, config):
+    dist, values, hidden = model(rollout.state, rollout.hidden[:, 0], rollout.done)
+    with torch.no_grad():
+        _, value_prime, _ = model(rollout.state_prime[:, -1], hidden, rollout.done[:, -1])
+        returns = n_step_discounted_return(rollout.reward, value_prime, rollout.done, gamma=config.gamma)
+
+    # critic
+    errors = returns - values
+    critic_loss = errors**2
+
+    # actor
+    advantages = errors.detach()
+    log_prob = dist.log_prob(rollout.action)
+    entropy = dist.entropy()
+
+    actor_loss = -log_prob * advantages - \
+                 config.entropy_weight * entropy
+
+    # loss
+    loss = (actor_loss + 0.5 * critic_loss).mean(1)
+
+    # metrics
+    metrics['rollout/reward'].update(rollout.reward.data.cpu().numpy())
+    metrics['rollout/value'].update(values.data.cpu().numpy())
+    metrics['rollout/advantage'].update(advantages.data.cpu().numpy())
+    metrics['rollout/entropy'].update(entropy.data.cpu().numpy())
+
+    return loss
 
 
 if __name__ == '__main__':

@@ -8,9 +8,9 @@ config = C(
     transforms=[
         C(type='adj_max'),
         C(type='grayscale'),
-        C(type='resize', size=84),
+        # C(type='resize', size=84),
         C(type='stack', k=4, dim=0),
-        # C(type='skip', k=4),
+        C(type='skip', k=4),
         C(type='normalize'),
     ],
     gamma=0.99,
@@ -19,9 +19,12 @@ config = C(
     workers=32,
     model=C(
         encoder=C(
-            type='conv',
-            base_channels=16,
-            out_features=128,
+            pre=C(
+                type='conv',
+                base_channels=16,
+                out_features=128,
+            ),
+            rnn=None,
             shared=True)),
     opt=C(
         type='adam',

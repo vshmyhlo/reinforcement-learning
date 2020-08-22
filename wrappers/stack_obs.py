@@ -2,7 +2,10 @@ import gym
 import numpy as np
 
 
-class StackObservation(gym.Wrapper):
+# TODO: handle episode end
+
+
+class StackObs(gym.Wrapper):
     def __init__(self, env, k, dim=-1):
         super().__init__(env)
 

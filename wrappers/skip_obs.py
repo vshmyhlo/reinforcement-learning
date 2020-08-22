@@ -2,7 +2,10 @@ import gym
 
 
 # TODO: what to do with render?
-class SkipObservation(gym.Wrapper):
+# TODO: handle episode end
+
+
+class SkipObs(gym.Wrapper):
     def __init__(self, env, k):
         super().__init__(env)
 
