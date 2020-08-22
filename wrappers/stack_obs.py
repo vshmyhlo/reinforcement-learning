@@ -25,8 +25,9 @@ class StackObs(gym.Wrapper):
 
         while len(self.buffer) < self.k:
             obs, reward, done, meta = self.env.step(self.action_space.sample())
+            assert not done
             self.buffer.append(obs)
-
+           
         obs = np.stack(self.buffer, self.dim)
 
         return obs
