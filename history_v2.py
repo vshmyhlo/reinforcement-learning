@@ -5,14 +5,14 @@ import torch
 
 class History(object):
     def __init__(self, keys):
-        self.container = namedtuple('Container', keys)
+        self.transition = namedtuple('Transition', keys)
         self.buffer = []
 
     def __len__(self):
         return len(self.buffer)
 
     def append(self, **kwargs):
-        self.buffer.append(self.container(**kwargs))
+        self.buffer.append(self.transition(**kwargs))
 
     def build_rollout(self):
         rollout = {}
@@ -25,4 +25,4 @@ class History(object):
         for k in rollout:
             rollout[k] = torch.stack(rollout[k], 1)
 
-        return self.container(**rollout)
+        return self.transition(**rollout)

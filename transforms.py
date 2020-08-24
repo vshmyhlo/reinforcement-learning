@@ -31,10 +31,6 @@ def resize(input, size):
     return input
 
 
-def gridworld(input):
-    return input['image'][:, :, 0].astype(np.int64)
-
-
 def apply_transforms(env, transforms):
     for transform in transforms:
         if transform.type == 'adj_max':
@@ -52,7 +48,7 @@ def apply_transforms(env, transforms):
         elif transform.type == 'normalize':
             env = gym.wrappers.TransformObservation(env, normalize)
         elif transform.type == 'gridworld':
-            env = gym.wrappers.TransformObservation(env, gridworld)
+            env = wrappers.GridWorld(env)
         else:
             raise AssertionError('invalid transform.type {}'.format(transform.type))
 

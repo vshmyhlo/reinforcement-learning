@@ -3,6 +3,7 @@ import os
 import click
 import gym
 import gym.wrappers
+import gym_minigrid
 import numpy as np
 import pybulletgym
 import torch
@@ -23,6 +24,7 @@ from v1.model import Model
 from vec_env import VecEnv
 
 pybulletgym
+gym_minigrid
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -30,6 +32,7 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 # TODO: check how finished episodes count
 # TODO: revisit stat calculation
 # TODO: normalize advantage?
+# TODO: how to agregate entropy for each actino
 # TODO: normalize input (especially images)
 # TODO: refactor EPS (noisy and incorrect statistics)
 # TODO: sum or average entropy of each action
@@ -92,20 +95,23 @@ def main(config_path, **kwargs):
     # training loop
     model.train()
     episode = 0
-    s, h = env.reset(), model.zero_state(config.workers)
-    d = None
+
+    s = env.reset()
+    h = model.zero_state(config.workers)
+    d = torch.ones(config.workers, dtype=torch.bool)
 
     bar = tqdm(total=config.episodes, desc='training')
     while episode < config.episodes:
-        history = History(['state', 'hidden', 'action', 'reward', 'done', 'state_prime'])
+        hist = History(['state', 'hidden', 'done'])
+        hist_prime = History(['state', 'hidden', 'done', 'action', 'reward'])
 
         with torch.no_grad():
             for _ in range(config.horizon):
-                a, _, h_prime = model(s, h, d)
+                hist.append(state=s, hidden=h, done=d)
+                a, _, h = model(s, h, d)
                 a = a.sample()
-                s_prime, r, d, info = env.step(a)
-                history.append(state=s, hidden=h, action=a, reward=r, done=d, state_prime=s_prime)
-                s, h = s_prime, h_prime
+                s, r, d, info = env.step(a)
+                hist_prime.append(state=s, hidden=h, done=d, action=a, reward=r)
 
                 indices, = torch.where(d)
                 for i in indices:
@@ -124,10 +130,11 @@ def main(config_path, **kwargs):
                             os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
 
         # build rollout
-        rollout = history.build_rollout()
+        rollout = hist.build_rollout()
+        rollout_prime = hist_prime.build_rollout()
 
         # loss
-        loss = compute_loss(model, rollout, metrics, config)
+        loss = compute_loss(env, model, rollout, rollout_prime, metrics, config)
 
         # metrics
         metrics['loss'].update(loss.data.cpu().numpy())
@@ -143,11 +150,11 @@ def main(config_path, **kwargs):
     env.close()
 
 
-def compute_loss(model, rollout, metrics, config):
+def compute_loss(env, model, rollout, rollout_prime, metrics, config):
     dist, values, hidden = model(rollout.state, rollout.hidden[:, 0], rollout.done)
     with torch.no_grad():
-        _, value_prime, _ = model(rollout.state_prime[:, -1], hidden, rollout.done[:, -1])
-        returns = n_step_discounted_return(rollout.reward, value_prime, rollout.done, gamma=config.gamma)
+        _, value_prime, _ = model(rollout_prime.state[:, -1], hidden, rollout_prime.done[:, -1])
+        returns = n_step_discounted_return(rollout_prime.reward, value_prime, rollout_prime.done, gamma=config.gamma)
 
     # critic
     errors = returns - values
@@ -155,8 +162,12 @@ def compute_loss(model, rollout, metrics, config):
 
     # actor
     advantages = errors.detach()
-    log_prob = dist.log_prob(rollout.action)
+    log_prob = dist.log_prob(rollout_prime.action)
     entropy = dist.entropy()
+
+    if isinstance(env.action_space, gym.spaces.Box):
+        log_prob = log_prob.sum(-1)
+        entropy = entropy.sum(-1)
 
     actor_loss = -log_prob * advantages - \
                  config.entropy_weight * entropy
@@ -165,7 +176,7 @@ def compute_loss(model, rollout, metrics, config):
     loss = (actor_loss + 0.5 * critic_loss).mean(1)
 
     # metrics
-    metrics['rollout/reward'].update(rollout.reward.data.cpu().numpy())
+    metrics['rollout/reward'].update(rollout_prime.reward.data.cpu().numpy())
     metrics['rollout/value'].update(values.data.cpu().numpy())
     metrics['rollout/advantage'].update(advantages.data.cpu().numpy())
     metrics['rollout/entropy'].update(entropy.data.cpu().numpy())

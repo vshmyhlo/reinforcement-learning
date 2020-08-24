@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 
 from model.layers import ConvNorm, Activation
@@ -69,41 +68,12 @@ class ConvEncoder(nn.Module):
 
         return input, h
 
-    def zero_state(self, batch_size):
-        return torch.zeros(batch_size, 1)
-
-
-class ConvRNNEncoder(nn.Module):
-    def __init__(self, state_space, base_channels, out_features):
-        super().__init__()
-
-        self.conv = ConvEncoder(state_space, base_channels, out_features)
-        self.rnn = nn.LSTMCell(out_features, out_features)
-
-    def forward(self, input, h, d):
-        h = self.reset_state(h, d)
-
-        input, _ = self.conv(input, None, None)
-        h = self.rnn(input, h)
-        input, _ = h
-
-        return input, h
-
-    def reset_state(self, h, d):
-        if h is None or d is None:
-            assert h is None
-            assert d is None
-        else:
-            h = tuple(torch.where(d.unsqueeze(-1), torch.zeros_like(x), x) for x in h)
-
-        return h
-
 
 class GridworldEncoder(nn.Module):
     def __init__(self, state_space, base_channels, out_features):
         super().__init__()
 
-        self.embedding = nn.Embedding(10, base_channels * 2**0)
+        self.embedding = nn.Embedding(9, base_channels * 2**0)
         self.conv = nn.Sequential(
             ConvNorm(base_channels * 2**0, base_channels * 2**1, 3, 2),
             Activation(),
@@ -127,62 +97,3 @@ class GridworldEncoder(nn.Module):
             input = input.view(b, t, input.size(1))
 
         return input
-
-
-class CustomRNNCell(nn.Module):
-    def __init__(self, features):
-        super().__init__()
-
-        self.hidden = nn.Sequential(
-            nn.Linear(features * 2, features),
-            nn.Tanh())
-        self.w = nn.Sequential(
-            nn.Linear(features * 2, features),
-            nn.Sigmoid())
-
-        nn.init.constant_(self.w[0].bias, 10.)
-
-    def forward(self, input, hidden):
-        if hidden is None:
-            hidden = torch.zeros_like(input)
-
-        cat = torch.cat([input, hidden], -1)
-        hidden = self.hidden(cat)
-        w = self.w(cat)
-
-        return w * input + (1 - w) * hidden
-
-
-class RNNEncoder(nn.Module):
-    def __init__(self, encoder, in_features, out_features):
-        super().__init__()
-
-        self.encoder = encoder
-        # self.rnn = nn.GRUCell(in_features, out_features)
-        self.rnn = CustomRNNCell(in_features)
-        self.output = nn.Sequential()
-
-    def forward(self, input, hidden, done):
-        input = self.encoder(input)
-
-        dim = input.dim()
-        if dim == 2:
-            input = input.unsqueeze(1)
-            assert done is None
-        else:
-            done = done.unsqueeze(-1)
-
-        outputs = []
-        for t in range(input.size(1)):
-            hidden = self.rnn(input[:, t], hidden)
-            outputs.append(hidden)
-            if done is not None:
-                hidden = torch.where(done[:, t], torch.zeros_like(hidden), hidden)
-
-        input = torch.stack(outputs, 1)
-        input = self.output(input)
-
-        if dim == 2:
-            input = input.squeeze(1)
-
-        return input, hidden

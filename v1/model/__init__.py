@@ -1,38 +1,35 @@
 import gym
 from torch import nn as nn
 
-from model.encoder import GridworldEncoder, ConvEncoder, FCEncoder, ConvRNNEncoder
+from model.encoder import GridworldEncoder, ConvEncoder, FCEncoder
 from model.layers import NoOp
+from model.rnn import RNN
 from v1.model.policy import PolicyCategorical, PolicyBeta
 from v1.model.value_function import ValueFunction
 
 
 class Model(nn.Module):
     def __init__(self, model, state_space, action_space):
-        pre = model.encoder.pre
-
         def build_encoder():
-            if pre.type == 'fc':
-                return FCEncoder(state_space, pre.out_features)
-            elif pre.type == 'conv':
-                return ConvEncoder(state_space, pre.base_channels, pre.out_features)
-            elif pre.type == 'conv_rnn':
-                return ConvRNNEncoder(state_space, pre.base_channels, pre.out_features)
-            # elif model.encoder.type == 'gridworld':
-            #     return GridworldEncoder(state_space, model.size)
+            if model.encoder.type == 'fc':
+                return FCEncoder(state_space, model.encoder.out_features)
+            elif model.encoder.type == 'conv':
+                return ConvEncoder(state_space, model.encoder.base_channels, model.encoder.out_features)
+            elif model.encoder.type == 'gridworld':
+                return GridworldEncoder(state_space, model.encoder.base_channels, model.encoder.out_features)
             else:
-                raise AssertionError('invalid pre.type {}'.format(pre.type))
+                raise AssertionError('invalid type {}'.format(model.encoder.type))
 
         def build_policy():
             if isinstance(action_space, gym.spaces.Discrete):
-                return PolicyCategorical(pre.out_features, action_space)
+                return PolicyCategorical(model.encoder.out_features, action_space)
             elif isinstance(action_space, gym.spaces.Box):
-                return PolicyBeta(pre.out_features, action_space)
+                return PolicyBeta(model.encoder.out_features, action_space)
             else:
                 raise AssertionError('invalid action_space {}'.format(action_space))
 
         def build_value_function():
-            return ValueFunction(pre.out_features)
+            return ValueFunction(model.encoder.out_features)
 
         super().__init__()
 
@@ -49,15 +46,18 @@ class Model(nn.Module):
                 build_encoder(),
                 build_value_function())
 
+        self.rnn = RNN(model.rnn.type, model.encoder.out_features, model.encoder.out_features)
+
     def forward(self, input, h, d):
-        input, h = self.encoder(input, h, d)
+        input = self.encoder(input)
+        input, h = self.rnn(input, h, d)
         dist = self.policy(input)
         value = self.value_function(input)
 
         return dist, value, h
 
     def zero_state(self, batch_size):
-        return self.encoder.zero_state(batch_size)
+        return self.rnn.zero_state(batch_size)
 
 
 # TODO: refactor
