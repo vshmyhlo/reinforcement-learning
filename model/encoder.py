@@ -11,8 +11,10 @@ class FCEncoder(nn.Module):
 
         self.layers = nn.Sequential(
             nn.Linear(state_space.shape[0], out_features),
+            # nn.BatchNorm1d(out_features),
             Activation(),
             nn.Linear(out_features, out_features),
+            # nn.BatchNorm1d(out_features),
             Activation())
 
     def forward(self, input):
@@ -39,7 +41,9 @@ class ConvEncoder(nn.Module):
             ConvNorm(base_channels * 2**4, base_channels * 2**5, 3, stride=2, padding=3 // 2),
             Activation())
         self.pool = nn.AdaptiveMaxPool2d(1)
-        self.output = nn.Linear(base_channels * 2**5, out_features)
+        self.output = nn.Sequential(
+            nn.Linear(base_channels * 2**5, out_features),
+            Activation())
 
         for m in self.modules():
             if isinstance(m, nn.BatchNorm2d):
@@ -69,17 +73,21 @@ class ConvEncoder(nn.Module):
         return input, h
 
 
-class GridworldEncoder(nn.Module):
+class GridWorldEncoder(nn.Module):
     def __init__(self, state_space, base_channels, out_features):
         super().__init__()
 
         self.embedding = nn.Embedding(9, base_channels * 2**0)
         self.conv = nn.Sequential(
-            ConvNorm(base_channels * 2**0, base_channels * 2**1, 3, 2),
+            ConvNorm(base_channels * 2**0, base_channels * 2**1, 3),
             Activation(),
             ConvNorm(base_channels * 2**1, base_channels * 2**2, 3),
+            Activation(),
+            ConvNorm(base_channels * 2**2, base_channels * 2**3, 3),
             Activation())
-        self.output = nn.Linear(base_channels * 2**2, out_features)
+        self.output = nn.Sequential(
+            nn.Linear(base_channels * 2**3, out_features),
+            Activation())
 
     def forward(self, input):
         dim = input.dim()

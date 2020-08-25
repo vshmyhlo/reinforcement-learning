@@ -19,9 +19,11 @@ class GridWorld(gym.ObservationWrapper):
     def observation(self, obs):
         image = obs['image'][:, :, 0].astype(np.int64)
 
-        obs = np.concatenate([
-            image.reshape(-1),
-            np.array([self.action], dtype=image.dtype)
-        ])
+        return image
 
-        return obs
+        # obs = np.concatenate([
+        #     image.reshape(-1),
+        #     np.array([self.action], dtype=image.dtype)
+        # ])
+        #
+        # return obs

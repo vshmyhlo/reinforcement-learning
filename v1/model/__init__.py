@@ -1,7 +1,7 @@
 import gym
 from torch import nn as nn
 
-from model.encoder import GridworldEncoder, ConvEncoder, FCEncoder
+from model.encoder import GridWorldEncoder, ConvEncoder, FCEncoder
 from model.layers import NoOp
 from model.rnn import RNN
 from v1.model.policy import PolicyCategorical, PolicyBeta
@@ -16,7 +16,7 @@ class Model(nn.Module):
             elif model.encoder.type == 'conv':
                 return ConvEncoder(state_space, model.encoder.base_channels, model.encoder.out_features)
             elif model.encoder.type == 'gridworld':
-                return GridworldEncoder(state_space, model.encoder.base_channels, model.encoder.out_features)
+                return GridWorldEncoder(state_space, model.encoder.base_channels, model.encoder.out_features)
             else:
                 raise AssertionError('invalid type {}'.format(model.encoder.type))
 
@@ -69,7 +69,7 @@ class ModelDQN(nn.Module):
             elif model.encoder.type == 'conv':
                 return ConvEncoder(state_space, model.encoder.size, model.size)
             elif model.encoder.type == 'gridworld':
-                return GridworldEncoder(state_space, model.size)
+                return GridWorldEncoder(state_space, model.size)
             else:
                 raise AssertionError('invalid model.encoder.type {}'.format(model.encoder.type))
 

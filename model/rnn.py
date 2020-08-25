@@ -43,6 +43,9 @@ class NoOpCell(nn.Module):
     def forward(self, input, hidden):
         return input, hidden
 
+    def zero_state(self, batch_size):
+        return torch.zeros(batch_size, 1)
+
 
 # TODO: debug loop
 class RNN(nn.Module):
