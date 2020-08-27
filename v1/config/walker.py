@@ -2,7 +2,7 @@ from all_the_tools.config import Config as C
 
 config = C(
     seed=42,
-    env='HopperPyBulletEnv-v0',
+    env='Walker2DPyBulletEnv-v0',
     episodes=100000,
     log_interval=1000,
     transforms=[],

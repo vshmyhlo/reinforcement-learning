@@ -14,11 +14,11 @@ from tqdm import tqdm
 import wrappers
 import wrappers.torch
 from history import History
+from model import Model
 from transforms import apply_transforms
 from utils import total_discounted_return
 from v1.common import build_optimizer
 from v1.config import build_default_config
-from v1.model import Model
 
 gym_minigrid
 
