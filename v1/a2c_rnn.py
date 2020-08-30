@@ -61,6 +61,12 @@ def main(config_path, **kwargs):
         **kwargs)
     del config_path, kwargs
 
+    if config.adv_norm:
+        print(
+            'warning: you are using advantage normalization with batch size of {} ({} * {}), '
+            'please make sure to use sufficiently large batch size when estimating advantage normalization statistics'
+                .format(config.workers * config.horizon, config.workers, config.horizon))
+
     writer = SummaryWriter(config.experiment_path)
 
     seed_torch(config.seed)
@@ -163,10 +169,6 @@ def compute_loss(env, model, rollout, metrics, config):
     # actor
     advantages = errors.detach()
     if config.adv_norm:
-        print(
-            'warning: you are using advantage normalization with batch size of {} ({} * {}), '
-            'please make sure to use sufficiently large batch size when estimating advantage normalization statistics'
-                .format(config.workers * config.horizon, config.workers, config.horizon))
         advantages = normalize(advantages)
     log_prob = dist.log_prob(rollout.action)
     entropy = dist.entropy()
@@ -175,8 +177,8 @@ def compute_loss(env, model, rollout, metrics, config):
         log_prob = log_prob.sum(-1)
         entropy = entropy.sum(-1)
 
-    actor_loss = -log_prob * advantages - \
-                 config.entropy_weight * entropy
+    actor_loss = -log_prob * advantages + \
+                 config.entropy_weight * -entropy
 
     # loss
     loss = (actor_loss + 0.5 * critic_loss).mean(1)
