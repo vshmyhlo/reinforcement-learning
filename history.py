@@ -1,62 +1,52 @@
 import torch
 
 
+class Rollout(object):
+    def __init__(self, data):
+        self.data = data
+
+    def __getattr__(self, key):
+        return self.data[key]
+
+
+class Transition(object):
+    def __init__(self):
+        self.data = {}
+
+    def record(self, **kwargs):
+        for k in kwargs:
+            if k in self.data:
+                raise ValueError('{} is already recorder'.format(k))
+            self.data[k] = kwargs[k]
+
+
 class History(object):
     def __init__(self):
-        self.history = {
-            'states': None,
-            'actions': None,
-            'rewards': None,
-            'dones': None,
-            'hidden': None,
-            'states_prime': None,
-        }
-
-        self.size = 0
+        self.buffer = []
 
     def __len__(self):
-        return self.size
+        return len(self.buffer)
 
-    def append(self, state=None, action=None, reward=None, done=None, hidden=None, state_prime=None):
-        updates = [
-            ('states', state),
-            ('actions', action),
-            ('rewards', reward),
-            ('dones', done),
-            ('hidden', hidden),
-            ('states_prime', state_prime),
-        ]
+    def append_transition(self):
+        transition = Transition()
+        self.buffer.append(transition)
 
-        for k, v in updates:
-            if v is None:
-                assert self.history[k] is None
-                continue
-            if self.history[k] is None:
-                self.history[k] = []
-            self.history[k].append(v)
+        return transition
 
-        self.size += 1
-
+    # TODO: check all transitions have saame keys
     def build_rollout(self):
-        history = {
-            k: torch.stack(self.history[k], 1) if self.history[k] is not None else None
-            for k in self.history
-        }
+        rollout = {}
+        for transition in self.buffer:
+            if len(rollout) == 0:
+                for k in transition.data:
+                    rollout[k] = []
 
-        return Rollout(
-            states=history['states'],
-            actions=history['actions'],
-            rewards=history['rewards'],
-            dones=history['dones'],
-            hidden=history['hidden'],
-            states_prime=history['states_prime'])
+            for k in transition.data:
+                rollout[k].append(transition.data[k])
 
+        for k in rollout:
+            rollout[k] = torch.stack(rollout[k], 1)
 
-class Rollout(object):
-    def __init__(self, states=None, actions=None, rewards=None, dones=None, hidden=None, states_prime=None):
-        self.states = states
-        self.actions = actions
-        self.rewards = rewards
-        self.dones = dones
-        self.hidden = hidden
-        self.states_prime = states_prime
+        rollout = Rollout(rollout)
+
+        return rollout

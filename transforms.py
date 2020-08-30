@@ -35,6 +35,8 @@ def apply_transforms(env, transforms):
     for transform in transforms:
         if transform.type == 'adj_max':
             env = wrappers.AdjMax(env)
+        elif transform.type == 'time_limit':
+            env = gym.wrappers.TimeLimit(env, transform.t)
         elif transform.type == 'grayscale':
             env = gym.wrappers.GrayScaleObservation(env)
         elif transform.type == 'resize':

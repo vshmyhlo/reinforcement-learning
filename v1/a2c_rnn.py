@@ -16,10 +16,11 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
-from history_v2 import History
+from history import History
 from model import Model
 from transforms import apply_transforms
 from utils import n_step_discounted_return
+from utils import normalize
 from v1.common import build_optimizer
 from vec_env import VecEnv
 
@@ -31,7 +32,6 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 # TODO: check how finished episodes count
 # TODO: revisit stat calculation
-# TODO: normalize advantage?
 # TODO: how to agregate entropy for each actino
 # TODO: normalize input (especially images)
 # TODO: refactor EPS (noisy and incorrect statistics)
@@ -69,7 +69,7 @@ def main(config_path, **kwargs):
         for _ in range(config.workers)])
     if config.render:
         env = wrappers.TensorboardBatchMonitor(env, writer, config.log_interval)
-    env = wrappers.Torch(env, dtype=torch.float, device=DEVICE)
+    env = wrappers.Torch(env, device=DEVICE)
     env.seed(config.seed)
 
     model = Model(config.model, env.observation_space, env.action_space)
@@ -85,10 +85,10 @@ def main(config_path, **kwargs):
         'eps': FPS(),
         'ep/length': Mean(),
         'ep/return': Mean(),
-        'rollout/entropy': Mean(),
         'rollout/reward': Mean(),
         'rollout/value': Mean(),
         'rollout/advantage': Mean(),
+        'rollout/entropy': Mean(),
     }
 
     # ==================================================================================================================
@@ -102,16 +102,17 @@ def main(config_path, **kwargs):
 
     bar = tqdm(total=config.episodes, desc='training')
     while episode < config.episodes:
-        hist = History(['state', 'hidden', 'done'])
-        hist_prime = History(['state', 'hidden', 'done', 'action', 'reward'])
+        hist = History()
 
         with torch.no_grad():
             for _ in range(config.horizon):
-                hist.append(state=s, hidden=h, done=d)
+                trans = hist.append_transition()
+
+                trans.record(state=s, hidden=h, done=d)
                 a, _, h = model(s, h, d)
                 a = a.sample()
                 s, r, d, info = env.step(a)
-                hist_prime.append(state=s, hidden=h, done=d, action=a, reward=r)
+                trans.record(action=a, reward=r, state_prime=s, hidden_prime=h, done_prime=d)
 
                 indices, = torch.where(d)
                 for i in indices:
@@ -131,14 +132,13 @@ def main(config_path, **kwargs):
 
         # build rollout
         rollout = hist.build_rollout()
-        rollout_prime = hist_prime.build_rollout()
 
         # loss
-        loss = compute_loss(env, model, rollout, rollout_prime, metrics, config)
+        loss = compute_loss(env, model, rollout, metrics, config)
 
         # metrics
         metrics['loss'].update(loss.data.cpu().numpy())
-        metrics['lr'].update(np.squeeze(scheduler.get_lr()))
+        metrics['lr'].update(np.squeeze(scheduler.get_last_lr()))
 
         # training
         optimizer.zero_grad()
@@ -150,11 +150,11 @@ def main(config_path, **kwargs):
     env.close()
 
 
-def compute_loss(env, model, rollout, rollout_prime, metrics, config):
+def compute_loss(env, model, rollout, metrics, config):
     dist, values, hidden = model(rollout.state, rollout.hidden[:, 0], rollout.done)
     with torch.no_grad():
-        _, value_prime, _ = model(rollout_prime.state[:, -1], hidden, rollout_prime.done[:, -1])
-        returns = n_step_discounted_return(rollout_prime.reward, value_prime, rollout_prime.done, gamma=config.gamma)
+        _, value_prime, _ = model(rollout.state_prime[:, -1], hidden, rollout.done_prime[:, -1])
+        returns = n_step_discounted_return(rollout.reward, value_prime, rollout.done_prime, gamma=config.gamma)
 
     # critic
     errors = returns - values
@@ -162,7 +162,13 @@ def compute_loss(env, model, rollout, rollout_prime, metrics, config):
 
     # actor
     advantages = errors.detach()
-    log_prob = dist.log_prob(rollout_prime.action)
+    if config.adv_norm:
+        print(
+            'warning: you are using advantage normalization with batch size of {} ({} * {}), '
+            'please make sure to use sufficiently large batch size when estimating advantage normalization statistics'
+                .format(config.workers * config.horizon, config.workers, config.horizon))
+        advantages = normalize(advantages)
+    log_prob = dist.log_prob(rollout.action)
     entropy = dist.entropy()
 
     if isinstance(env.action_space, gym.spaces.Box):
@@ -176,7 +182,7 @@ def compute_loss(env, model, rollout, rollout_prime, metrics, config):
     loss = (actor_loss + 0.5 * critic_loss).mean(1)
 
     # metrics
-    metrics['rollout/reward'].update(rollout_prime.reward.data.cpu().numpy())
+    metrics['rollout/reward'].update(rollout.reward.data.cpu().numpy())
     metrics['rollout/value'].update(values.data.cpu().numpy())
     metrics['rollout/advantage'].update(advantages.data.cpu().numpy())
     metrics['rollout/entropy'].update(entropy.data.cpu().numpy())

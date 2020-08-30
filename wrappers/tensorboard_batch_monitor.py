@@ -20,6 +20,8 @@ class TensorboardBatchMonitor(gym.Wrapper):
     def step(self, action):
         state, reward, done, meta = self.env.step(action)
 
+        # FIXME: last render includes scene from next episode
+       
         for i in self.tracks:
             frame = self.env.render(mode='rgb_array', index=i).copy()
             frame = torch.tensor(frame).permute(2, 0, 1)
