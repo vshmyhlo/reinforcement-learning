@@ -125,7 +125,7 @@ def main(config_path, **kwargs):
                             model.state_dict(),
                             os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
 
-        rollout = history.build_rollout()
+        rollout = history.full_rollout()
         dist, values = model(rollout.states)
         with torch.no_grad():
             _, value_prime = model(rollout.states_prime[:, -1])

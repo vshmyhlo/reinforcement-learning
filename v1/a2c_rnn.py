@@ -30,12 +30,13 @@ gym_minigrid
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
+# TODO: generalized advantage estimation
+# TODO: fix train/eval mode failure
+# TODO: batchnorm
 # TODO: check how finished episodes count
 # TODO: revisit stat calculation
-# TODO: how to agregate entropy for each actino
 # TODO: normalize input (especially images)
 # TODO: refactor EPS (noisy and incorrect statistics)
-# TODO: sum or average entropy of each action
 
 
 # TODO: move to shared code
@@ -97,9 +98,7 @@ def main(config_path, **kwargs):
         'rollout/entropy': Mean(),
     }
 
-    # ==================================================================================================================
-    # training loop
-    model.train()
+    # training loop ====================================================================================================
     episode = 0
 
     s = env.reset()
@@ -110,6 +109,8 @@ def main(config_path, **kwargs):
     while episode < config.episodes:
         hist = History()
 
+        # TODO: should work with model.eval()
+        model.train()
         with torch.no_grad():
             for _ in range(config.horizon):
                 trans = hist.append_transition()
@@ -136,8 +137,11 @@ def main(config_path, **kwargs):
                             model.state_dict(),
                             os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
 
+        # optimization =================================================================================================
+        model.train()
+
         # build rollout
-        rollout = hist.build_rollout()
+        rollout = hist.full_rollout()
 
         # loss
         loss = compute_loss(env, model, rollout, metrics, config)

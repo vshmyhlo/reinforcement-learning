@@ -142,7 +142,7 @@ def main():
                         writer.add_histogram('rollout/return', returns, global_step=episode)
                         writer.add_histogram('rollout/action_value', action_values, global_step=episode)
 
-        rollout = history.build_rollout()
+        rollout = history.full_rollout()
         action_values = policy_model(rollout.states)
         action_values = action_values * one_hot(rollout.actions, action_values.size(-1))
         action_values = action_values.sum(-1)

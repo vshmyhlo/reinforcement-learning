@@ -2,7 +2,7 @@ from all_the_tools.config import Config as C
 
 config = C(
     seed=42,
-    env='HopperPyBulletEnv-v0',
+    env='HumanoidPyBulletEnv-v0',
     episodes=100000,
     log_interval=1000,
     transforms=[],
@@ -10,11 +10,11 @@ config = C(
     entropy_weight=1e-2,
     horizon=32,
     workers=32,
-    adv_norm=True,
+    adv_norm=False,
     model=C(
         encoder=C(
             type='fc',
-            out_features=32),
+            out_features=64),
         rnn=C(
             type='noop')),
     opt=C(

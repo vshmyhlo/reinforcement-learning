@@ -104,7 +104,7 @@ def main():
                 else:
                     s = s_prime
 
-        rollout = history.build_rollout()
+        rollout = history.full_rollout()
         dist, values = model(rollout.states)
         returns = total_discounted_return(rollout.rewards, gamma=config.gamma)
 
