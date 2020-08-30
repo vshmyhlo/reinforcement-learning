@@ -42,12 +42,12 @@ def test_vec_env():
     assert np.array_equal(d, [False, False, True])
 
     # step 2
-    a = np.array([2, 5, 2])
+    a = np.array([2, 5, 5])
     s_prime, r, d, _ = env.step(a)
     history.append((r, d))
 
-    assert np.array_equal(s_prime, [2, 0, 2])
-    assert np.array_equal(r, [4., 10., 4.])
+    assert np.array_equal(s_prime, [2, 0, 5])
+    assert np.array_equal(r, [4., 10., 10.])
     assert np.array_equal(d, [False, True, False])
 
     env.close()
