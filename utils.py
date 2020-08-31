@@ -33,19 +33,35 @@ def one_step_discounted_return(rewards, values_prime, dones, gamma):
     return returns
 
 
-# TODO: test
 def generalized_advantage_estimation(rewards, values, value_prime, dones, gamma, lam):
+    masks = (~dones).float()
     values_prime = torch.cat([values[:, 1:], value_prime.unsqueeze(1)], 1)
-    masks = (1 - dones).float()
-    gae = torch.zeros(rewards.size(0))
+    td_error = rewards + masks * gamma * values_prime - values
     gaes = torch.zeros_like(rewards)
 
+    gae = torch.zeros(rewards.size(0))
     for t in reversed(range(rewards.size(1))):
-        delta = rewards[:, t] + masks[:, t] * gamma * values_prime[:, t] - values[:, t]
-        gae = delta + masks[:, t] * gamma * lam * gae
+        gae = td_error[:, t] + masks[:, t] * gamma * lam * gae
         gaes[:, t] = gae
 
     return gaes
+
+
+# def generalized_advantage_estimation(rewards, values, value_prime, dones, gamma, lam):
+#     masks = (~dones).float()
+#     values_prime = torch.cat([values[:, 1:], value_prime.unsqueeze(1)], 1)
+#     td_error = rewards + masks * gamma * values_prime - values
+#     gaes = torch.zeros_like(rewards)
+#
+#     for t in range(rewards.size(1)):
+#         gae = torch.zeros(rewards.size(0))
+#         for l in range(rewards.size(1) - t):
+#             gae += (gamma * lam)**l * td_error[:, t + l]
+#             if dones[:, t + l]:
+#                 break
+#         gaes[:, t] = gae
+#
+#     return gaes
 
 
 def normalize(input):

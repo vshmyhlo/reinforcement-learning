@@ -1,7 +1,8 @@
+import impala
 import numpy as np
 import tensorflow as tf
+
 import utils
-import impala
 
 
 class UtilsTest(tf.test.TestCase):
@@ -14,18 +15,6 @@ class UtilsTest(tf.test.TestCase):
             2 + 0.9 * 3,
             3
         ]]
-
-        assert np.allclose(actual, expected)
-
-    def test_batch_generalized_advantage_estimation(self):
-        rewards = [[1., 1., 1., 1., 1., 1.]]
-        values = [[3., 4., 5., 3., 4., 5.]]
-        value_prime = [6.]
-        dones = [[False, False, True, False, False, False]]
-
-        actual = utils.batch_generalized_advantage_estimation(rewards, values, value_prime, dones, gamma=0.9, lam=0.8)
-        actual = self.evaluate(actual)
-        expected = [[0.6064, -1.38, -4., 3.40576, 2.508, 1.4]]
 
         assert np.allclose(actual, expected)
 
@@ -94,7 +83,7 @@ def test_episode_tracker():
     episode_tracker.update([1, 2], np.array([False, False]))
     episode_tracker.update([1, 2], np.array([False, True]))
     episode_tracker.update([1, 2], np.array([True, False]))
-   
+
     finished_episodes = episode_tracker.reset()
 
     assert np.array_equal(finished_episodes, np.array([

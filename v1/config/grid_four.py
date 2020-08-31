@@ -10,7 +10,7 @@ config = C(
     ],
     gamma=0.99,
     entropy_weight=1e-2,
-    adv_norm=True,  # be sure to have large batch size (workers * horizon)
+    adv_norm=True,
     horizon=32,
     workers=32,
     model=C(

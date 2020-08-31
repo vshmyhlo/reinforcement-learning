@@ -27,7 +27,7 @@ def test_n_step_discounted_return():
         2.,
         6.6,
     ]])
-  
+
     assert torch.allclose(actual, expected)
 
 
@@ -54,5 +54,25 @@ def test_n_step_discounted_return_3():
         utils.total_discounted_return(rewards[:, :2], gamma=0.9),
         utils.total_discounted_return(rewards[:, 2:], gamma=0.9)[:, :2],
     ], 1)
+
+    assert torch.allclose(actual, expected)
+
+
+def test_generalized_advantage_estimation():
+    rewards = torch.tensor([
+        [1., 1., 1., 1., 1., 1.]
+    ], dtype=torch.float)
+    values = torch.tensor([
+        [3., 4., 5., 3., 4., 5.],
+    ], dtype=torch.float)
+    value_prime = torch.tensor([
+        6.
+    ], dtype=torch.float)
+    dones = torch.tensor([
+        [False, False, True, False, False, False]
+    ], dtype=torch.bool)
+
+    actual = utils.generalized_advantage_estimation(rewards, values, value_prime, dones, gamma=0.9, lam=0.8)
+    expected = torch.tensor([[0.6064, -1.38, -4., 3.40576, 2.508, 1.4]])
 
     assert torch.allclose(actual, expected)
