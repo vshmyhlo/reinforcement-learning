@@ -31,7 +31,6 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 # TODO: generalized advantage estimation
 # TODO: fix train/eval mode failure
-# TODO: batchnorm
 # TODO: check how finished episodes count
 # TODO: revisit stat calculation
 # TODO: normalize input (especially images)
@@ -108,8 +107,7 @@ def main(config_path, **kwargs):
     while episode < config.episodes:
         hist = History()
 
-        # TODO: should work with model.eval()
-        model.train()
+        model.eval()
         with torch.no_grad():
             for _ in range(config.horizon):
                 trans = hist.append_transition()

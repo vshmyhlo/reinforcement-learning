@@ -1,6 +1,7 @@
 import torch.nn as nn
+from batchrenorm import BatchRenorm2d
 
-from model.layers import ConvNorm, Activation
+from model.layers import Activation
 
 
 class FCEncoder(nn.Module):
@@ -30,29 +31,20 @@ class ConvEncoder(nn.Module):
         super().__init__()
 
         self.layers = nn.Sequential(
-            nn.BatchNorm2d(state_space.shape[2]),
-            ConvNorm(state_space.shape[2], base_channels * 2**2, 7, stride=2, padding=7 // 2),
+            # nn.BatchNorm2d(state_space.shape[2]),
+            nn.Conv2d(state_space.shape[2], base_channels * 2**2, 7, stride=2, padding=3),
             Activation(),
             nn.MaxPool2d(3, 2),
-            ConvNorm(base_channels * 2**2, base_channels * 2**3, 3, stride=2, padding=3 // 2),
+            nn.Conv2d(base_channels * 2**2, base_channels * 2**3, 3, stride=2, padding=1),
             Activation(),
-            ConvNorm(base_channels * 2**3, base_channels * 2**4, 3, stride=2, padding=3 // 2),
+            nn.Conv2d(base_channels * 2**3, base_channels * 2**4, 3, stride=2, padding=1),
             Activation(),
-            ConvNorm(base_channels * 2**4, base_channels * 2**5, 3, stride=2, padding=3 // 2),
+            nn.Conv2d(base_channels * 2**4, base_channels * 2**5, 3, stride=2, padding=1),
             Activation())
         self.pool = nn.AdaptiveMaxPool2d(1)
         self.output = nn.Sequential(
             nn.Linear(base_channels * 2**5, out_features),
             Activation())
-
-        for m in self.modules():
-            if isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
 
     def forward(self, input, h, d):
         dim = input.dim()
@@ -79,11 +71,14 @@ class GridWorldEncoder(nn.Module):
 
         self.embedding = nn.Embedding(9, base_channels * 2**0)
         self.conv = nn.Sequential(
-            ConvNorm(base_channels * 2**0, base_channels * 2**1, 3),
+            nn.Conv2d(base_channels * 2**0, base_channels * 2**1, 3, bias=False),
+            BatchRenorm2d(base_channels * 2**1),
             Activation(),
-            ConvNorm(base_channels * 2**1, base_channels * 2**2, 3),
+            nn.Conv2d(base_channels * 2**1, base_channels * 2**2, 3, bias=False),
+            BatchRenorm2d(base_channels * 2**2),
             Activation(),
-            ConvNorm(base_channels * 2**2, base_channels * 2**3, 3),
+            nn.Conv2d(base_channels * 2**2, base_channels * 2**3, 3, bias=False),
+            BatchRenorm2d(base_channels * 2**3),
             Activation())
         self.output = nn.Sequential(
             nn.Linear(base_channels * 2**3, out_features),
