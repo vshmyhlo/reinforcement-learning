@@ -25,7 +25,6 @@ gym_minigrid
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-# TODO: make shared weights work
 # TODO: train/eval
 # TODO: return normalization
 

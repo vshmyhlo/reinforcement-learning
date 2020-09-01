@@ -24,8 +24,7 @@ config = C(
                 base_channels=16,
                 out_features=128,
             ),
-            rnn=None,
-            shared=True)),
+            rnn=None)),
     opt=C(
         type='adam',
         lr=1e-3))

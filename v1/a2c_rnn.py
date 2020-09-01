@@ -15,12 +15,11 @@ from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
+import utils
 import wrappers
 from history import History
 from model import Model
 from transforms import apply_transforms
-from utils import n_step_discounted_return
-from utils import normalize
 from v1.common import build_optimizer
 from vec_env import VecEnv
 
@@ -153,7 +152,8 @@ def main(config_path, **kwargs):
         # training
         optimizer.zero_grad()
         loss.mean().backward()
-        nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+        if config.grad_clip_norm is not None:
+            nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip_norm)
         optimizer.step()
 
     bar.close()
@@ -164,7 +164,7 @@ def compute_loss(env, model, rollout, metrics, config):
     dist, values, hidden = model(rollout.state, rollout.hidden[:, 0], rollout.done)
     with torch.no_grad():
         _, value_prime, _ = model(rollout.state_prime[:, -1], hidden, rollout.done_prime[:, -1])
-        returns = n_step_discounted_return(rollout.reward, value_prime, rollout.done_prime, gamma=config.gamma)
+        returns = utils.n_step_discounted_return(rollout.reward, value_prime, rollout.done_prime, gamma=config.gamma)
 
     # critic
     errors = returns - values
@@ -173,7 +173,8 @@ def compute_loss(env, model, rollout, metrics, config):
     # actor
     advantages = errors.detach()
     if config.adv_norm:
-        advantages = normalize(advantages)
+        advantages = utils.normalize(advantages)
+
     log_prob = dist.log_prob(rollout.action)
     entropy = dist.entropy()
 
