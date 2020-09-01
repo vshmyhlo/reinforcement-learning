@@ -1,8 +1,8 @@
 # Implementations of popular deep reinforcement learning algorithms
 
-* [REINFORCE (Policy Gradient Monte Carlo)](v1/pg_mc.py)
-* [Actor Critic with Monte Carlo advantage estimate](v1/ac_mc.py)
-* [Advantage Actor Critic (A2C)](v1/a2c.py)
+* [REINFORCE (Policy Gradient Monte Carlo)](algos/pg_mc.py)
+* [Actor Critic with Monte Carlo advantage estimate](algos/ac_mc.py)
+* [Advantage Actor Critic (A2C)](algos/a2c.py)
 
 # TODO
 * ideas from atari preprocessing

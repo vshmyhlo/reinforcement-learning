@@ -15,11 +15,11 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
+from algos.common import build_optimizer
 from history import History
 from model import Model
 from transforms import apply_transforms
 from utils import n_step_discounted_return
-from v1.common import build_optimizer
 from vec_env import VecEnv
 
 pybulletgym

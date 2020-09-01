@@ -14,12 +14,12 @@ from tqdm import tqdm
 
 import wrappers
 import wrappers.torch
+from algos.common import build_optimizer
+from algos.config import build_default_config
 from history import History
 from model import ModelDQN
 from transforms import apply_transforms
 from utils import one_step_discounted_return
-from v1.common import build_optimizer
-from v1.config import build_default_config
 from vec_env import VecEnv
 
 gym_minigrid

@@ -17,10 +17,10 @@ from tqdm import tqdm
 
 import utils
 import wrappers
+from algos.common import build_optimizer
 from history import History
 from model import Model
 from transforms import apply_transforms
-from v1.common import build_optimizer
 from vec_env import VecEnv
 
 pybulletgym
