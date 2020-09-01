@@ -12,7 +12,6 @@ class PolicyCategorical(nn.Module):
 
         self.layers = nn.Sequential(
             nn.Linear(in_features, in_features),
-            # nn.BatchNorm1d(in_features),
             Activation(),
             nn.Linear(in_features, action_space.n))
 
@@ -32,7 +31,6 @@ class PolicyBeta(nn.Module):
 
         self.layers = nn.Sequential(
             nn.Linear(in_features, in_features),
-            # nn.BatchNorm1d(in_features),
             Activation(),
             nn.Linear(in_features, np.prod(action_space.shape) * 2))
 

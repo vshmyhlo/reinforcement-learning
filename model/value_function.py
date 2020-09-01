@@ -9,7 +9,6 @@ class ValueFunction(nn.Sequential):
 
         self.layers = nn.Sequential(
             nn.Linear(in_features, in_features),
-            # nn.BatchNorm1d(in_features),
             Activation(),
             nn.Linear(in_features, 1))
 

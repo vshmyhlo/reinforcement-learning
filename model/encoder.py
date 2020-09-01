@@ -12,12 +12,8 @@ class FCEncoder(nn.Module):
 
         self.layers = nn.Sequential(
             nn.Linear(state_space.shape[0], out_features),
-            # nn.BatchNorm1d(out_features),
-            Activation(),
-            nn.Linear(out_features, out_features),
-            # nn.BatchNorm1d(out_features),
             Activation())
-
+       
     def forward(self, input):
         input = self.layers(input)
 
