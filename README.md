@@ -1,8 +1,8 @@
 # Implementations of popular deep reinforcement learning algorithms
 
-* [REINFORCE (Policy Gradient Monte Carlo)](algos/pg_mc.py)
-* [Actor Critic with Monte Carlo advantage estimate](algos/ac_mc.py)
-* [Advantage Actor Critic (A2C)](algos/a2c.py)
+* [REINFORCE (Policy Gradient Monte Carlo)](algo/pg_mc.py)
+* [Actor Critic with Monte Carlo advantage estimate](algo/ac_mc.py)
+* [Advantage Actor Critic (A2C)](algo/a2c.py)
 
 # TODO
 * batch-norm not working in eval mode

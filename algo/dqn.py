@@ -14,8 +14,8 @@ from tqdm import tqdm
 
 import wrappers
 import wrappers.torch
-from algos.common import build_optimizer
-from algos.config import build_default_config
+from algo.common import build_optimizer
+from algo.config import build_default_config
 from history import History
 from model import ModelDQN
 from transforms import apply_transforms

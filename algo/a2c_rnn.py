@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 import utils
 import wrappers
-from algos.common import build_optimizer
+from algo.common import build_optimizer
 from history import History
 from model import Model
 from transforms import apply_transforms
