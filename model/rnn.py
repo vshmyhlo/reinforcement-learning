@@ -90,5 +90,4 @@ class RNN(nn.Module):
         return torch.where(d.unsqueeze(-1), torch.zeros_like(h), h)
 
     def zero_state(self, batch_size):
-        # torch.zeros(batch_size, self.rnn.hidden_size)
         return self.rnn.zero_state(batch_size)

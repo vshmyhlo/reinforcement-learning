@@ -5,16 +5,14 @@
 * [Advantage Actor Critic (A2C)](algos/a2c.py)
 
 # TODO
+* batch-norm not working in eval mode
 * ideas from atari preprocessing
 * normalize input
-* skip-observations
 * optimize for speed
-* rnn-model
 * 4-frames stack
 * plot grad dist/grad norm
 * plot different losses
 * plot more metrics (from shultz presentation)
-* plot mean/std
 * mean by time
 * remove float casts
 * refactor rollout to use s_prime at every step
@@ -28,8 +26,8 @@
 * advantage normalization
 * td(0)
 * exp replay
-* gae
 * td(lambda)
 * mpi
 * a3c
 * compute running mean/std of metrics
+* rename meta to info

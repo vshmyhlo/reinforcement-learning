@@ -22,7 +22,7 @@ class Batch(gym.Wrapper):
 
         return state, reward, done, meta
 
-    def render(self, mode='human', index=0):
+    def render(self, mode='human', index=0, **kwargs):
         assert index == 0
 
-        return self.env.render(mode=mode)
+        return super().render(mode, **kwargs)
