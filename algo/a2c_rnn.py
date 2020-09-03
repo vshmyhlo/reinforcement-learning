@@ -29,7 +29,6 @@ gym_minigrid
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-# TODO: generalized advantage estimation
 # TODO: fix train/eval mode failure
 # TODO: check how finished episodes count
 # TODO: revisit stat calculation

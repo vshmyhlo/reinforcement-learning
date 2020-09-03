@@ -1,25 +1,29 @@
-import argparse
+import os
 
+import click
 import gym
 import gym.wrappers
 import gym_minigrid
 import numpy as np
+import pybulletgym
 import torch
 import torch.nn as nn
+from all_the_tools.config import load_config
 from all_the_tools.metrics import Mean, Last, FPS
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
+import utils
 import wrappers
 import wrappers.torch
 from algo.common import build_optimizer
-from algo.config import build_default_config
 from history import History
 from model import Model
 from transforms import apply_transforms
 from utils import total_discounted_return
 
+pybulletgym
 gym_minigrid
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -27,16 +31,6 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 # TODO: train/eval
 # TODO: return normalization
-
-
-def build_parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-mc')
-    parser.add_argument('--config-path', type=str, required=True)
-    parser.add_argument('--restore-path', type=str)
-    parser.add_argument('--no-render', action='store_true')
-
-    return parser
 
 
 def build_env(config):
@@ -49,15 +43,16 @@ def build_env(config):
     return env
 
 
-def main():
-    args = build_parser().parse_args()
-    config = build_default_config()
-    config.merge_from_file(args.config_path)
-    config.experiment_path = args.experiment_path
-    config.restore_path = args.restore_path
-    config.render = not args.no_render
-    config.freeze()
-    del args
+@click.command()
+@click.option('--config-path', type=click.Path(), required=True)
+@click.option('--experiment-path', type=click.Path(), required=True)
+@click.option('--restore-path', type=click.Path())
+@click.option('--render', is_flag=True)
+def main(config_path, **kwargs):
+    config = load_config(
+        config_path,
+        **kwargs)
+    del config_path, kwargs
 
     writer = SummaryWriter(config.experiment_path)
 
@@ -80,7 +75,9 @@ def main():
         'lr': Last(),
         'eps': FPS(),
         'ep/length': Mean(),
-        'ep/reward': Mean(),
+        'ep/return': Mean(),
+        'rollout/reward': Mean(),
+        'rollout/advantage': Mean(),
         'rollout/entropy': Mean(),
     }
 
@@ -88,58 +85,87 @@ def main():
     # training loop
     model.train()
     for episode in tqdm(range(config.episodes), desc='training'):
-        history = History()
+        hist = History()
         s = env.reset()
+        h = model.zero_state(1)
+        d = torch.ones(1, dtype=torch.bool)
 
         with torch.no_grad():
             while True:
-                a, _ = model(s)
+                trans = hist.append_transition()
+
+                trans.record(state=s, hidden=h, done=d)
+                a, _, h = model(s, h, d)
                 a = a.sample()
-                s_prime, r, d, meta = env.step(a)
-                history.append(state=s, action=a, reward=r)
+                s_prime, r, d, info = env.step(a)
+                trans.record(action=a, reward=r)
 
                 if d:
                     break
                 else:
                     s = s_prime
 
-        rollout = history.full_rollout()
-        dist, _ = model(rollout.states)
-        returns = total_discounted_return(rollout.rewards, gamma=config.gamma)
+        # optimization =================================================================================================
+        model.train()
 
-        # actor
-        advantages = returns.detach()
-        if isinstance(env.action_space, gym.spaces.Box):
-            advantages = advantages.unsqueeze(-1)
-        actor_loss = -(dist.log_prob(rollout.actions) * advantages)
-        actor_loss -= config.entropy_weight * dist.entropy()
-        if isinstance(env.action_space, gym.spaces.Box):
-            actor_loss = actor_loss.mean(-1)
+        # build rollout
+        rollout = hist.full_rollout()
 
-        loss = actor_loss.mean(1)
+        # loss
+        loss = compute_loss(env, model, rollout, metrics, config)
 
+        # metrics
         metrics['loss'].update(loss.data.cpu().numpy())
-        metrics['lr'].update(np.squeeze(scheduler.get_lr()))
-        metrics['rollout/entropy'].update(dist.entropy().data.cpu().numpy())
+        metrics['lr'].update(np.squeeze(scheduler.get_last_lr()))
 
         # training
         optimizer.zero_grad()
         loss.mean().backward()
-        nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+        if config.grad_clip_norm is not None:
+            nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip_norm)
         optimizer.step()
         scheduler.step()
 
         metrics['eps'].update(1)
-        metrics['ep/length'].update(meta[0]['episode']['l'])
-        metrics['ep/reward'].update(meta[0]['episode']['r'])
+        metrics['ep/length'].update(info[0]['episode']['l'])
+        metrics['ep/return'].update(info[0]['episode']['r'])
 
         if episode % config.log_interval == 0 and episode > 0:
             for k in metrics:
                 writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
-            writer.add_histogram('rollout/action', rollout.actions, global_step=episode)
-            writer.add_histogram('rollout/reward', rollout.rewards, global_step=episode)
-            writer.add_histogram('rollout/return', returns, global_step=episode)
-            writer.add_histogram('rollout/advantage', advantages, global_step=episode)
+            torch.save(
+                model.state_dict(),
+                os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
+
+
+def compute_loss(env, model, rollout, metrics, config):
+    dist, _, hidden = model(rollout.state, rollout.hidden, rollout.done)
+    returns = total_discounted_return(rollout.reward, gamma=config.gamma)
+
+    # actor
+    advantages = returns.detach()
+    if config.adv_norm:
+        advantages = utils.normalize(advantages)
+
+    log_prob = dist.log_prob(rollout.action)
+    entropy = dist.entropy()
+
+    if isinstance(env.action_space, gym.spaces.Box):
+        log_prob = log_prob.sum(-1)
+        entropy = entropy.sum(-1)
+
+    actor_loss = -log_prob * advantages + \
+                 config.entropy_weight * -entropy
+
+    # loss
+    loss = actor_loss.mean(1)
+
+    # metrics
+    metrics['rollout/reward'].update(rollout.reward.data.cpu().numpy())
+    metrics['rollout/advantage'].update(advantages.data.cpu().numpy())
+    metrics['rollout/entropy'].update(entropy.data.cpu().numpy())
+
+    return loss
 
 
 if __name__ == '__main__':
