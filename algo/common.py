@@ -1,4 +1,7 @@
+import gym
 import torch
+
+from transforms import apply_transforms
 
 
 def build_optimizer(optimizer, parameters):
@@ -10,3 +13,14 @@ def build_optimizer(optimizer, parameters):
         return torch.optim.Adam(parameters, optimizer.lr, weight_decay=0.)
     else:
         raise AssertionError('invalid optimizer.type {}'.format(optimizer.type))
+
+
+def build_env(config):
+    env = gym.make(config.env)
+    env = gym.wrappers.RecordEpisodeStatistics(env)
+    if isinstance(env.action_space, gym.spaces.Box):
+        assert env.action_space.is_bounded()
+        env = gym.wrappers.RescaleAction(env, 0., 1.)
+    env = apply_transforms(env, config.transforms)
+
+    return env

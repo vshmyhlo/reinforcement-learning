@@ -1,7 +1,5 @@
 import argparse
 
-import gym
-import gym.wrappers
 import gym_minigrid
 import numpy as np
 import torch
@@ -14,11 +12,10 @@ from tqdm import tqdm
 
 import wrappers
 import wrappers.torch
-from algo.common import build_optimizer
+from algo.common import build_optimizer, build_env
 from algo.config import build_default_config
 from history import History
 from model import ModelDQN
-from transforms import apply_transforms
 from utils import one_step_discounted_return
 from vec_env import VecEnv
 
@@ -39,17 +36,6 @@ def build_parser():
     parser.add_argument('--no-render', action='store_true')
 
     return parser
-
-
-# TODO: move to shared code
-def build_env(config):
-    env = gym.make(config.env)
-    env = gym.wrappers.RecordEpisodeStatistics(env)
-    if isinstance(env.action_space, gym.spaces.Box):
-        env = gym.wrappers.RescaleAction(env, 0., 1.)
-    env = apply_transforms(env, config.transforms)
-
-    return env
 
 
 def sample_action(action_value, e):

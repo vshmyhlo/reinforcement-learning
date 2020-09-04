@@ -15,10 +15,9 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
-from algo.common import build_optimizer
+from algo.common import build_optimizer, build_env
 from history import History
 from model import Model
-from transforms import apply_transforms
 from utils import n_step_discounted_return
 from vec_env import VecEnv
 
@@ -33,18 +32,6 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 # TODO: normalize input (especially images)
 # TODO: refactor EPS (noisy and incorrect statistics)
 # TODO: sum or average entropy of each action
-
-
-# TODO: move to shared code
-def build_env(config):
-    env = gym.make(config.env)
-    env = gym.wrappers.RecordEpisodeStatistics(env)
-    if isinstance(env.action_space, gym.spaces.Box):
-        assert env.action_space.is_bounded()
-        env = gym.wrappers.RescaleAction(env, 0., 1.)
-    env = apply_transforms(env, config.transforms)
-
-    return env
 
 
 @click.command()
