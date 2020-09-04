@@ -136,7 +136,7 @@ def main(config_path, **kwargs):
 
 
 def compute_loss(env, model, rollout, metrics, config):
-    dist, values, hidden = model(rollout.state, rollout.hidden[:, 0], rollout.done)
+    dist, values, _ = model(rollout.state, rollout.hidden[:, 0], rollout.done)
     returns = utils.total_discounted_return(rollout.reward, gamma=config.gamma)
 
     # critic
