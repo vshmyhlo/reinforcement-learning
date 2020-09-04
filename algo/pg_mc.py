@@ -135,15 +135,11 @@ def main(config_path, **kwargs):
 
 
 def compute_loss(env, model, rollout, metrics, config):
-    dist, values, hidden = model(rollout.state, rollout.hidden[:, 0], rollout.done)
+    dist, _, _ = model(rollout.state, rollout.hidden[:, 0], rollout.done)
     returns = utils.total_discounted_return(rollout.reward, gamma=config.gamma)
 
-    # critic
-    errors = returns - values
-    critic_loss = errors**2
-
     # actor
-    advantages = errors.detach()
+    advantages = returns.detach()
     if config.adv_norm:
         advantages = utils.normalize(advantages)
 
@@ -158,11 +154,10 @@ def compute_loss(env, model, rollout, metrics, config):
                  config.entropy_weight * -entropy
 
     # loss
-    loss = (actor_loss + 0.5 * critic_loss).mean(1)
+    loss = actor_loss.mean(1)
 
     # metrics
     metrics['rollout/reward'].update(rollout.reward.data.cpu().numpy())
-    metrics['rollout/value'].update(values.data.cpu().numpy())
     metrics['rollout/advantage'].update(advantages.data.cpu().numpy())
     metrics['rollout/entropy'].update(entropy.data.cpu().numpy())
 
