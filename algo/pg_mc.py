@@ -21,7 +21,6 @@ from algo.common import build_optimizer
 from history import History
 from model import Model
 from transforms import apply_transforms
-from utils import total_discounted_return
 
 pybulletgym
 gym_minigrid
@@ -81,15 +80,14 @@ def main(config_path, **kwargs):
         'rollout/entropy': Mean(),
     }
 
-    # ==================================================================================================================
-    # training loop
-    model.train()
+    # training loop ====================================================================================================
     for episode in tqdm(range(config.episodes), desc='training'):
         hist = History()
         s = env.reset()
         h = model.zero_state(1)
         d = torch.ones(1, dtype=torch.bool)
 
+        model.eval()
         with torch.no_grad():
             while True:
                 trans = hist.append_transition()
@@ -97,13 +95,11 @@ def main(config_path, **kwargs):
                 trans.record(state=s, hidden=h, done=d)
                 a, _, h = model(s, h, d)
                 a = a.sample()
-                s_prime, r, d, info = env.step(a)
+                s, r, d, info = env.step(a)
                 trans.record(action=a, reward=r)
 
                 if d:
                     break
-                else:
-                    s = s_prime
 
         # optimization =================================================================================================
         model.train()
@@ -139,11 +135,15 @@ def main(config_path, **kwargs):
 
 
 def compute_loss(env, model, rollout, metrics, config):
-    dist, _, hidden = model(rollout.state, rollout.hidden, rollout.done)
-    returns = total_discounted_return(rollout.reward, gamma=config.gamma)
+    dist, values, hidden = model(rollout.state, rollout.hidden[:, 0], rollout.done)
+    returns = utils.total_discounted_return(rollout.reward, gamma=config.gamma)
+
+    # critic
+    errors = returns - values
+    critic_loss = errors**2
 
     # actor
-    advantages = returns.detach()
+    advantages = errors.detach()
     if config.adv_norm:
         advantages = utils.normalize(advantages)
 
@@ -158,10 +158,11 @@ def compute_loss(env, model, rollout, metrics, config):
                  config.entropy_weight * -entropy
 
     # loss
-    loss = actor_loss.mean(1)
+    loss = (actor_loss + 0.5 * critic_loss).mean(1)
 
     # metrics
     metrics['rollout/reward'].update(rollout.reward.data.cpu().numpy())
+    metrics['rollout/value'].update(values.data.cpu().numpy())
     metrics['rollout/advantage'].update(advantages.data.cpu().numpy())
     metrics['rollout/entropy'].update(entropy.data.cpu().numpy())
 
