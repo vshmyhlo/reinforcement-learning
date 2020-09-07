@@ -13,7 +13,6 @@ from tqdm import tqdm
 import wrappers
 import wrappers.torch
 from algo.common import build_optimizer, build_env
-from algo.config import build_default_config
 from history import History
 from model import ModelDQN
 from utils import one_step_discounted_return

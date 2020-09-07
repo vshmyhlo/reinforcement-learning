@@ -38,7 +38,27 @@ class PolicyBeta(nn.Module):
         input = self.layers(input)
         input = F.softplus(input) + 1.
 
-        a, b = torch.split(input, input.size(-1) // 2, -1)
+        a, b = torch.chunk(input, 2, -1)
         dist = torch.distributions.Beta(a, b)
+
+        return dist
+
+
+class PolicyNormal(nn.Module):
+    def __init__(self, in_features, action_space):
+        super().__init__()
+
+        assert np.array_equal(action_space.low, np.zeros_like(action_space.low))
+        assert np.array_equal(action_space.high, np.ones_like(action_space.high))
+
+        self.layers = nn.Sequential(
+            nn.Linear(in_features, in_features),
+            Activation(),
+            nn.Linear(in_features, np.prod(action_space.shape) * 2))
+
+    def forward(self, input):
+        input = self.layers(input)
+        mean, std = torch.chunk(input, 2, -1)
+        dist = torch.distributions.Normal(mean, F.softplus(std))
 
         return dist

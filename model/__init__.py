@@ -2,7 +2,7 @@ import gym
 from torch import nn as nn
 
 from model.encoder import GridWorldEncoder, ConvEncoder, FCEncoder
-from model.policy import PolicyCategorical, PolicyBeta
+from model.policy import PolicyCategorical, PolicyBeta, PolicyNormal
 from model.rnn import RNN
 from model.value_function import ValueFunction
 
@@ -24,6 +24,7 @@ class Model(nn.Module):
                 return PolicyCategorical(model.encoder.out_features, action_space)
             elif isinstance(action_space, gym.spaces.Box):
                 return PolicyBeta(model.encoder.out_features, action_space)
+                # return PolicyNormal(model.encoder.out_features, action_space)
             else:
                 raise AssertionError('invalid action_space {}'.format(action_space))
 

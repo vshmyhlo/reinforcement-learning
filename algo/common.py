@@ -1,4 +1,5 @@
 import gym
+import gym.wrappers
 import torch
 
 from transforms import apply_transforms
@@ -21,6 +22,7 @@ def build_env(config):
     if isinstance(env.action_space, gym.spaces.Box):
         assert env.action_space.is_bounded()
         env = gym.wrappers.RescaleAction(env, 0., 1.)
+        # env = gym.wrappers.ClipAction(env)
     env = apply_transforms(env, config.transforms)
 
     return env
