@@ -4,7 +4,7 @@ config = C(
     seed=42,
     env='MiniGrid-FourRooms-v0',
     episodes=100000,
-    log_interval=1000,
+    log_interval=10,
     transforms=[
         C(type='gridworld'),
     ],

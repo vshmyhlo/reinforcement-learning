@@ -16,6 +16,7 @@
 * mean by time
 * remove float casts
 * refactor rollout to use s_prime at every step
+* normalize input
 * use record episode stats
 * merge wrappers and transforms
 * make layers shared between versions

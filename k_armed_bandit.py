@@ -32,8 +32,8 @@ def main():
 
     with Pool(os.cpu_count()) as pool:
         for e in [0, 0.01, 0.1]:
-            label = 'e={}'.format(e)
             build_agent = partial(SampleAverageAgent, e=e)
+            label = 'e={}'.format(e)
 
             rewards = np.zeros(steps)
             f = partial(evaluate_run, build_agent=build_agent, steps=steps)
