@@ -9,21 +9,21 @@ import torch
 import torch.nn as nn
 import torch.optim
 from all_the_tools.config import load_config
-from all_the_tools.metrics import Mean, Last, FPS
+from all_the_tools.metrics import FPS, Last, Mean
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
-from algo.common import build_optimizer, build_env
+from algo.common import build_env, build_optimizer
 from history import History
 from model import Model
-from utils import n_step_discounted_return
+from utils import compute_n_step_discounted_return
 from vec_env import VecEnv
 
 pybulletgym
 
-DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 # TODO: check how finished episodes count
@@ -35,22 +35,18 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 @click.command()
-@click.option('--config-path', type=click.Path(), required=True)
-@click.option('--experiment-path', type=click.Path(), required=True)
-@click.option('--restore-path', type=click.Path())
-@click.option('--render', is_flag=True)
+@click.option("--config-path", type=click.Path(), required=True)
+@click.option("--experiment-path", type=click.Path(), required=True)
+@click.option("--restore-path", type=click.Path())
+@click.option("--render", is_flag=True)
 def main(config_path, **kwargs):
-    config = load_config(
-        config_path,
-        **kwargs)
+    config = load_config(config_path, **kwargs)
     del config_path, kwargs
 
     writer = SummaryWriter(config.experiment_path)
 
     seed_torch(config.seed)
-    env = VecEnv([
-        lambda: build_env(config)
-        for _ in range(config.workers)])
+    env = VecEnv([lambda: build_env(config) for _ in range(config.workers)])
     if config.render:
         env = wrappers.TensorboardBatchMonitor(env, writer, config.log_interval)
     env = wrappers.Torch(env, dtype=torch.float, device=DEVICE)
@@ -64,12 +60,12 @@ def main(config_path, **kwargs):
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, config.episodes)
 
     metrics = {
-        'loss': Mean(),
-        'lr': Last(),
-        'eps': FPS(),
-        'ep/length': Mean(),
-        'ep/return': Mean(),
-        'rollout/entropy': Mean(),
+        "loss": Mean(),
+        "lr": Last(),
+        "eps": FPS(),
+        "ep/length": Mean(),
+        "ep/return": Mean(),
+        "rollout/entropy": Mean(),
     }
 
     # ==================================================================================================================
@@ -78,7 +74,7 @@ def main(config_path, **kwargs):
     episode = 0
     s = env.reset()
 
-    bar = tqdm(total=config.episodes, desc='training')
+    bar = tqdm(total=config.episodes, desc="training")
     while episode < config.episodes:
         history = History()
 
@@ -90,37 +86,54 @@ def main(config_path, **kwargs):
                 history.append(state=s, action=a, reward=r, done=d, state_prime=s_prime)
                 s = s_prime
 
-                indices, = torch.where(d)
+                (indices,) = torch.where(d)
                 for i in indices:
-                    metrics['eps'].update(1)
-                    metrics['ep/length'].update(info[i]['episode']['l'])
-                    metrics['ep/return'].update(info[i]['episode']['r'])
+                    metrics["eps"].update(1)
+                    metrics["ep/length"].update(info[i]["episode"]["l"])
+                    metrics["ep/return"].update(info[i]["episode"]["r"])
                     episode += 1
                     scheduler.step()
                     bar.update(1)
 
                     if episode % config.log_interval == 0 and episode > 0:
                         for k in metrics:
-                            writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
-                        writer.add_histogram('rollout/action', rollout.actions, global_step=episode)
-                        writer.add_histogram('rollout/reward', rollout.rewards, global_step=episode)
-                        writer.add_histogram('rollout/return', returns, global_step=episode)
-                        writer.add_histogram('rollout/value', values, global_step=episode)
-                        writer.add_histogram('rollout/advantage', advantages, global_step=episode)
+                            writer.add_scalar(
+                                k, metrics[k].compute_and_reset(), global_step=episode
+                            )
+                        writer.add_histogram(
+                            "rollout/action", rollout.actions, global_step=episode
+                        )
+                        writer.add_histogram(
+                            "rollout/reward", rollout.rewards, global_step=episode
+                        )
+                        writer.add_histogram(
+                            "rollout/return", returns, global_step=episode
+                        )
+                        writer.add_histogram(
+                            "rollout/value", values, global_step=episode
+                        )
+                        writer.add_histogram(
+                            "rollout/advantage", advantages, global_step=episode
+                        )
 
                         torch.save(
                             model.state_dict(),
-                            os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
+                            os.path.join(
+                                config.experiment_path, "model_{}.pth".format(episode)
+                            ),
+                        )
 
         rollout = history.full_rollout()
         dist, values = model(rollout.states)
         with torch.no_grad():
             _, value_prime = model(rollout.states_prime[:, -1])
-            returns = n_step_discounted_return(rollout.rewards, value_prime, rollout.dones, gamma=config.gamma)
+            returns = compute_n_step_discounted_return(
+                rollout.rewards, value_prime, rollout.dones, gamma=config.gamma
+            )
 
         # critic
         errors = returns - values
-        critic_loss = errors**2
+        critic_loss = errors ** 2
 
         # actor
         advantages = errors.detach()
@@ -132,15 +145,14 @@ def main(config_path, **kwargs):
             entropy = entropy.sum(-1)
         assert log_prob.dim() == entropy.dim() == 2
 
-        actor_loss = -log_prob * advantages - \
-                     config.entropy_weight * entropy
+        actor_loss = -log_prob * advantages - config.entropy_weight * entropy
 
         # loss
         loss = (actor_loss + 0.5 * critic_loss).mean(1)
 
-        metrics['loss'].update(loss.data.cpu().numpy())
-        metrics['lr'].update(np.squeeze(scheduler.get_lr()))
-        metrics['rollout/entropy'].update(dist.entropy().data.cpu().numpy())
+        metrics["loss"].update(loss.data.cpu().numpy())
+        metrics["lr"].update(np.squeeze(scheduler.get_lr()))
+        metrics["rollout/entropy"].update(dist.entropy().data.cpu().numpy())
 
         # training
         optimizer.zero_grad()
@@ -152,5 +164,5 @@ def main(config_path, **kwargs):
     env.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

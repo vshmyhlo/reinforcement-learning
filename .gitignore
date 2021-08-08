@@ -2,3 +2,4 @@ __pycache__
 .cache
 .idea
 sync.sh
+log

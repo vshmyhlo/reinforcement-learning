@@ -10,14 +10,14 @@ import torch
 import torch.nn as nn
 import torch.optim
 from all_the_tools.config import load_config
-from all_the_tools.metrics import Mean, Last, FPS
+from all_the_tools.metrics import FPS, Last, Mean
 from all_the_tools.torch.utils import seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import utils
 import wrappers
-from algo.common import build_optimizer, build_env
+from algo.common import build_env, build_optimizer
 from history import History
 from model import Model
 from vec_env import VecEnv
@@ -118,7 +118,11 @@ def main(config_path, **kwargs):
                             writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
                         torch.save(
                             model.state_dict(),
-                            os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
+                            os.path.join(config.experiment_path, 'model_{}.pth'.format(),
+                            os.path.join(
+                                config.experiment_path, "model_{}.pth".format(episode)
+                            ),
+                        )
 
         # optimization =================================================================================================
         model.train()
@@ -130,8 +134,8 @@ def main(config_path, **kwargs):
         loss = compute_loss(env, model, rollout, metrics, config)
 
         # metrics
-        metrics['loss'].update(loss.data.cpu().numpy())
-        metrics['lr'].update(np.squeeze(scheduler.get_last_lr()))
+        metrics["loss"].update(loss.data.cpu().numpy())
+        metrics["lr"].update(np.squeeze(scheduler.get_last_lr()))
 
         # training
         optimizer.zero_grad()
@@ -147,12 +151,16 @@ def main(config_path, **kwargs):
 def compute_loss(env, model, rollout, metrics, config):
     dist, values, hidden = model(rollout.state, rollout.hidden[:, 0], rollout.done)
     with torch.no_grad():
-        _, value_prime, _ = model(rollout.state_prime[:, -1], hidden, rollout.done_prime[:, -1])
-        returns = utils.n_step_discounted_return(rollout.reward, value_prime, rollout.done_prime, gamma=config.gamma)
+        _, value_prime, _ = model(
+            rollout.state_prime[:, -1], hidden, rollout.done_prime[:, -1]
+        )
+        returns = utils.compute_n_step_discounted_return(
+            rollout.reward, value_prime, rollout.done_prime, gamma=config.gamma
+        )
 
     # critic
     errors = returns - values
-    critic_loss = errors**2
+    critic_loss = errors ** 2
 
     # actor
     advantages = errors.detach()
@@ -166,20 +174,19 @@ def compute_loss(env, model, rollout, metrics, config):
         log_prob = log_prob.sum(-1)
         entropy = entropy.sum(-1)
 
-    actor_loss = -log_prob * advantages + \
-                 config.entropy_weight * -entropy
+    actor_loss = -log_prob * advantages + config.entropy_weight * -entropy
 
     # loss
     loss = (actor_loss + 0.5 * critic_loss).mean(1)
 
     # metrics
-    metrics['rollout/reward'].update(rollout.reward.data.cpu().numpy())
-    metrics['rollout/value'].update(values.data.cpu().numpy())
-    metrics['rollout/advantage'].update(advantages.data.cpu().numpy())
-    metrics['rollout/entropy'].update(entropy.data.cpu().numpy())
+    metrics["rollout/reward"].update(rollout.reward.data.cpu().numpy())
+    metrics["rollout/value"].update(values.data.cpu().numpy())
+    metrics["rollout/advantage"].update(advantages.data.cpu().numpy())
+    metrics["rollout/entropy"].update(entropy.data.cpu().numpy())
 
     return loss
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
