@@ -106,21 +106,13 @@ def main(config_path, **kwargs):
                         writer.add_histogram(
                             "rollout/reward", rollout.rewards, global_step=episode
                         )
-                        writer.add_histogram(
-                            "rollout/return", returns, global_step=episode
-                        )
-                        writer.add_histogram(
-                            "rollout/value", values, global_step=episode
-                        )
-                        writer.add_histogram(
-                            "rollout/advantage", advantages, global_step=episode
-                        )
+                        writer.add_histogram("rollout/return", returns, global_step=episode)
+                        writer.add_histogram("rollout/value", values, global_step=episode)
+                        writer.add_histogram("rollout/advantage", advantages, global_step=episode)
 
                         torch.save(
                             model.state_dict(),
-                            os.path.join(
-                                config.experiment_path, "model_{}.pth".format(episode)
-                            ),
+                            os.path.join(config.experiment_path, "model_{}.pth".format(episode)),
                         )
 
         rollout = history.full_rollout()

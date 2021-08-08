@@ -3,14 +3,17 @@ from multiprocessing import Pipe, Process
 
 import numpy as np
 
-Command = Enum('Command', [
-    'RESET',
-    'STEP',
-    'RENDER',
-    'SEED',
-    'GET_META',
-    'CLOSE',
-])
+Command = Enum(
+    "Command",
+    [
+        "RESET",
+        "STEP",
+        "RENDER",
+        "SEED",
+        "GET_META",
+        "CLOSE",
+    ],
+)
 
 
 def worker(env_fn, conn):
@@ -22,16 +25,16 @@ def worker(env_fn, conn):
         if command is Command.RESET:
             conn.send(env.reset())
         elif command is Command.STEP:
-            action, = data
+            (action,) = data
             state, reward, done, meta = env.step(action)
             if done:
                 state = env.reset()
             conn.send((state, reward, done, meta))
         elif command is Command.RENDER:
-            mode, = data
+            (mode,) = data
             conn.send(env.render(mode=mode))
         elif command is Command.SEED:
-            seed, = data
+            (seed,) = data
             conn.send(env.seed(seed))
         elif command is Command.GET_META:
             conn.send((env.observation_space, env.action_space, env.reward_range, env.metadata))
@@ -39,7 +42,7 @@ def worker(env_fn, conn):
             conn.send(env.close())
             break
         else:
-            raise AssertionError('invalid command {}'.format(command))
+            raise AssertionError("invalid command {}".format(command))
 
 
 class VecEnv(object):
@@ -47,14 +50,16 @@ class VecEnv(object):
         self.conns, child_conns = zip(*[Pipe(duplex=True) for _ in range(len(env_fns))])
         self.processes = [
             Process(target=worker, args=(env_fn, child_conn))
-            for env_fn, child_conn in zip(env_fns, child_conns)]
+            for env_fn, child_conn in zip(env_fns, child_conns)
+        ]
 
         for process in self.processes:
             process.start()
 
         self.conns[0].send((Command.GET_META,))
-        self.observation_space, self.action_space, self.reward_range, self.metadata = \
-            self.conns[0].recv()
+        self.observation_space, self.action_space, self.reward_range, self.metadata = self.conns[
+            0
+        ].recv()
 
     def reset(self):
         for conn in self.conns:
@@ -79,7 +84,7 @@ class VecEnv(object):
 
         return state, reward, done, meta
 
-    def render(self, mode='human', index=0):
+    def render(self, mode="human", index=0):
         self.conns[index].send((Command.RENDER, mode))
 
         return self.conns[index].recv()

@@ -2,9 +2,7 @@ import torch
 
 
 def total_discounted_return(rewards, gamma):
-    value_prime = torch.zeros(
-        rewards.size(0), dtype=rewards.dtype, device=rewards.device
-    )
+    value_prime = torch.zeros(rewards.size(0), dtype=rewards.dtype, device=rewards.device)
     dones = torch.full_like(rewards, False, dtype=torch.bool, device=rewards.device)
     dones[:, rewards.size(1) - 1] = True
 

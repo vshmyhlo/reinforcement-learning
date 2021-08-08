@@ -38,7 +38,7 @@ def test_vec_env():
     history.append((r, d))
 
     assert np.array_equal(s_prime, [0, 5, 0])
-    assert np.array_equal(r, [0., 10., 20.])
+    assert np.array_equal(r, [0.0, 10.0, 20.0])
     assert np.array_equal(d, [False, False, True])
 
     # step 2
@@ -47,7 +47,7 @@ def test_vec_env():
     history.append((r, d))
 
     assert np.array_equal(s_prime, [2, 0, 5])
-    assert np.array_equal(r, [4., 10., 10.])
+    assert np.array_equal(r, [4.0, 10.0, 10.0])
     assert np.array_equal(d, [False, True, False])
 
     env.close()

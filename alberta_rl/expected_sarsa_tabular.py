@@ -22,9 +22,7 @@ def expected_action_value(q, o, env: gym.Env):
     n = env.action_space.n
     a = np.argmax([q[(o, a)] for a in range(n)])
 
-    return q[(o, a)] * (1 - EPS) + EPS * sum(
-        q[(o, a2)] for a2 in range(n) if a2 != a
-    ) / (n - 1)
+    return q[(o, a)] * (1 - EPS) + EPS * sum(q[(o, a2)] for a2 in range(n) if a2 != a) / (n - 1)
 
 
 def main():
@@ -46,9 +44,7 @@ def main():
                 q[(o, a)] += ALPHA * (r - q[(o, a)])
             else:
                 v[o] += ALPHA * (r + GAMMA * v[o_p] - v[o])
-                q[(o, a)] += ALPHA * (
-                    r + GAMMA * expected_action_value(q, o_p, env) - q[(o, a)]
-                )
+                q[(o, a)] += ALPHA * (r + GAMMA * expected_action_value(q, o_p, env) - q[(o, a)])
 
             o, a = o_p, a_p
             if d:

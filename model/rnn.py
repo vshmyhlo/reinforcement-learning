@@ -52,14 +52,14 @@ class RNN(nn.Module):
     def __init__(self, type, in_features, out_features):
         super().__init__()
 
-        if type == 'gru':
+        if type == "gru":
             self.rnn = GRUCell(in_features, out_features)
-        if type == 'lstm':
+        if type == "lstm":
             self.rnn = LSTMCell(in_features, out_features)
-        elif type == 'noop':
+        elif type == "noop":
             self.rnn = NoOpCell(in_features, out_features)
         else:
-            raise ValueError('invalid type {}'.format(type))
+            raise ValueError("invalid type {}".format(type))
 
     def forward(self, input, hidden, done):
         squeeze = False

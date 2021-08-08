@@ -16,7 +16,7 @@ class KArmedBandit(gym.Env):
 
         if self.walk is not None:
             self.arm_reward += np.random.normal(0, self.walk, size=self.arm_reward.shape)
-           
+
         return None, reward, True, None
 
     def reset(self):

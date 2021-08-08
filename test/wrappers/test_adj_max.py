@@ -31,11 +31,7 @@ def test_adj_max():
     env = AdjMax(DummyEnv())
 
     obs = env.reset()
-    assert np.allclose(
-        obs,
-        np.array([1., 1., 0.]))
+    assert np.allclose(obs, np.array([1.0, 1.0, 0.0]))
 
     obs, _, _, _ = env.step(env.action_space.sample())
-    assert np.allclose(
-        obs,
-        np.array([0., 1., 1.]))
+    assert np.allclose(obs, np.array([0.0, 1.0, 1.0]))

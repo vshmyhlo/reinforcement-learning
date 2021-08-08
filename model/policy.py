@@ -13,7 +13,8 @@ class PolicyCategorical(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(in_features, in_features),
             Activation(),
-            nn.Linear(in_features, action_space.n))
+            nn.Linear(in_features, action_space.n),
+        )
 
     def forward(self, input):
         input = self.layers(input)
@@ -32,11 +33,12 @@ class PolicyBeta(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(in_features, in_features),
             Activation(),
-            nn.Linear(in_features, np.prod(action_space.shape) * 2))
+            nn.Linear(in_features, np.prod(action_space.shape) * 2),
+        )
 
     def forward(self, input):
         input = self.layers(input)
-        input = F.softplus(input) + 1.
+        input = F.softplus(input) + 1.0
 
         a, b = torch.chunk(input, 2, -1)
         dist = torch.distributions.Beta(a, b)
@@ -54,7 +56,8 @@ class PolicyNormal(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(in_features, in_features),
             Activation(),
-            nn.Linear(in_features, np.prod(action_space.shape) * 2))
+            nn.Linear(in_features, np.prod(action_space.shape) * 2),
+        )
 
     def forward(self, input):
         input = self.layers(input)

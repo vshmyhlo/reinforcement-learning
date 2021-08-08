@@ -8,9 +8,8 @@ class ValueFunction(nn.Sequential):
         super().__init__()
 
         self.layers = nn.Sequential(
-            nn.Linear(in_features, in_features),
-            Activation(),
-            nn.Linear(in_features, 1))
+            nn.Linear(in_features, in_features), Activation(), nn.Linear(in_features, 1)
+        )
 
     def forward(self, input):
         input = self.layers(input)

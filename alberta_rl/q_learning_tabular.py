@@ -39,9 +39,7 @@ def main():
             else:
                 v[o] += ALPHA * (r + GAMMA * v[o_p] - v[o])
                 q[(o, a)] += ALPHA * (
-                    r
-                    + GAMMA * max(q[(o_p, a_p)] for a_p in range(env.action_space.n))
-                    - q[(o, a)]
+                    r + GAMMA * max(q[(o_p, a_p)] for a_p in range(env.action_space.n)) - q[(o, a)]
                 )
 
             o, a = o_p, a_p

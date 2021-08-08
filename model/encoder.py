@@ -10,9 +10,7 @@ class FCEncoder(nn.Module):
 
         super().__init__()
 
-        self.layers = nn.Sequential(
-            nn.Linear(state_space.shape[0], out_features),
-            Activation())
+        self.layers = nn.Sequential(nn.Linear(state_space.shape[0], out_features), Activation())
 
     def forward(self, input):
         input = self.layers(input)
@@ -28,19 +26,18 @@ class ConvEncoder(nn.Module):
 
         self.layers = nn.Sequential(
             # nn.BatchNorm2d(state_space.shape[2]),
-            nn.Conv2d(state_space.shape[2], base_channels * 2**2, 7, stride=2, padding=3),
+            nn.Conv2d(state_space.shape[2], base_channels * 2 ** 2, 7, stride=2, padding=3),
             Activation(),
             nn.MaxPool2d(3, 2),
-            nn.Conv2d(base_channels * 2**2, base_channels * 2**3, 3, stride=2, padding=1),
+            nn.Conv2d(base_channels * 2 ** 2, base_channels * 2 ** 3, 3, stride=2, padding=1),
             Activation(),
-            nn.Conv2d(base_channels * 2**3, base_channels * 2**4, 3, stride=2, padding=1),
+            nn.Conv2d(base_channels * 2 ** 3, base_channels * 2 ** 4, 3, stride=2, padding=1),
             Activation(),
-            nn.Conv2d(base_channels * 2**4, base_channels * 2**5, 3, stride=2, padding=1),
-            Activation())
+            nn.Conv2d(base_channels * 2 ** 4, base_channels * 2 ** 5, 3, stride=2, padding=1),
+            Activation(),
+        )
         self.pool = nn.AdaptiveMaxPool2d(1)
-        self.output = nn.Sequential(
-            nn.Linear(base_channels * 2**5, out_features),
-            Activation())
+        self.output = nn.Sequential(nn.Linear(base_channels * 2 ** 5, out_features), Activation())
 
     def forward(self, input, h, d):
         dim = input.dim()
@@ -65,20 +62,19 @@ class GridWorldEncoder(nn.Module):
     def __init__(self, state_space, base_channels, out_features):
         super().__init__()
 
-        self.embedding = nn.Embedding(9, base_channels * 2**0)
+        self.embedding = nn.Embedding(9, base_channels * 2 ** 0)
         self.conv = nn.Sequential(
-            nn.Conv2d(base_channels * 2**0, base_channels * 2**1, 3, bias=False),
-            BatchRenorm2d(base_channels * 2**1),
+            nn.Conv2d(base_channels * 2 ** 0, base_channels * 2 ** 1, 3, bias=False),
+            BatchRenorm2d(base_channels * 2 ** 1),
             Activation(),
-            nn.Conv2d(base_channels * 2**1, base_channels * 2**2, 3, bias=False),
-            BatchRenorm2d(base_channels * 2**2),
+            nn.Conv2d(base_channels * 2 ** 1, base_channels * 2 ** 2, 3, bias=False),
+            BatchRenorm2d(base_channels * 2 ** 2),
             Activation(),
-            nn.Conv2d(base_channels * 2**2, base_channels * 2**3, 3, bias=False),
-            BatchRenorm2d(base_channels * 2**3),
-            Activation())
-        self.output = nn.Sequential(
-            nn.Linear(base_channels * 2**3, out_features),
-            Activation())
+            nn.Conv2d(base_channels * 2 ** 2, base_channels * 2 ** 3, 3, bias=False),
+            BatchRenorm2d(base_channels * 2 ** 3),
+            Activation(),
+        )
+        self.output = nn.Sequential(nn.Linear(base_channels * 2 ** 3, out_features), Activation())
 
     def forward(self, input):
         dim = input.dim()

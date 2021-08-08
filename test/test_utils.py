@@ -24,9 +24,7 @@ def test_n_step_discounted_return():
     rewards = torch.tensor([[1.0, 2.0, 3.0]])
     value_prime = torch.tensor([4.0])
     dones = torch.tensor([[False, True, False]])
-    actual = utils.compute_n_step_discounted_return(
-        rewards, value_prime, dones, gamma=0.9
-    )
+    actual = utils.compute_n_step_discounted_return(rewards, value_prime, dones, gamma=0.9)
 
     expected = torch.tensor(
         [
@@ -45,9 +43,7 @@ def test_n_step_discounted_return_2():
     rewards = torch.tensor([[1.0], [1.0]])
     value_prime = torch.tensor([2.0, 2.0])
     dones = torch.tensor([[False], [True]])
-    actual = utils.compute_n_step_discounted_return(
-        rewards, value_prime, dones, gamma=0.9
-    )
+    actual = utils.compute_n_step_discounted_return(rewards, value_prime, dones, gamma=0.9)
 
     expected = torch.tensor(
         [

@@ -10,14 +10,18 @@ from model.value_function import ValueFunction
 class Model(nn.Module):
     def __init__(self, model, state_space, action_space):
         def build_encoder():
-            if model.encoder.type == 'fc':
+            if model.encoder.type == "fc":
                 return FCEncoder(state_space, model.encoder.out_features)
-            elif model.encoder.type == 'conv':
-                return ConvEncoder(state_space, model.encoder.base_channels, model.encoder.out_features)
-            elif model.encoder.type == 'gridworld':
-                return GridWorldEncoder(state_space, model.encoder.base_channels, model.encoder.out_features)
+            elif model.encoder.type == "conv":
+                return ConvEncoder(
+                    state_space, model.encoder.base_channels, model.encoder.out_features
+                )
+            elif model.encoder.type == "gridworld":
+                return GridWorldEncoder(
+                    state_space, model.encoder.base_channels, model.encoder.out_features
+                )
             else:
-                raise AssertionError('invalid type {}'.format(model.encoder.type))
+                raise AssertionError("invalid type {}".format(model.encoder.type))
 
         def build_policy():
             if isinstance(action_space, gym.spaces.Discrete):
@@ -26,7 +30,7 @@ class Model(nn.Module):
                 return PolicyBeta(model.encoder.out_features, action_space)
                 # return PolicyNormal(model.encoder.out_features, action_space)
             else:
-                raise AssertionError('invalid action_space {}'.format(action_space))
+                raise AssertionError("invalid action_space {}".format(action_space))
 
         def build_value_function():
             return ValueFunction(model.encoder.out_features)
@@ -66,18 +70,17 @@ class Model(nn.Module):
 class ModelDQN(nn.Module):
     def __init__(self, model, state_space, action_space):
         def build_encoder():
-            if model.encoder.type == 'dense':
+            if model.encoder.type == "dense":
                 return FCEncoder(state_space, model.size)
-            elif model.encoder.type == 'conv':
+            elif model.encoder.type == "conv":
                 return ConvEncoder(state_space, model.encoder.size, model.size)
-            elif model.encoder.type == 'gridworld':
+            elif model.encoder.type == "gridworld":
                 return GridWorldEncoder(state_space, model.size)
             else:
-                raise AssertionError('invalid model.encoder.type {}'.format(model.encoder.type))
+                raise AssertionError("invalid model.encoder.type {}".format(model.encoder.type))
 
         def build_action_value_functoin():
-            return nn.Sequential(
-                nn.Linear(model.size, action_space.n))
+            return nn.Sequential(nn.Linear(model.size, action_space.n))
 
         super().__init__()
 

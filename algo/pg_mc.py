@@ -25,7 +25,7 @@ from model import Model
 pybulletgym
 gym_minigrid
 
-DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 # TODO: train/eval
@@ -33,14 +33,12 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 @click.command()
-@click.option('--config-path', type=click.Path(), required=True)
-@click.option('--experiment-path', type=click.Path(), required=True)
-@click.option('--restore-path', type=click.Path())
-@click.option('--render', is_flag=True)
+@click.option("--config-path", type=click.Path(), required=True)
+@click.option("--experiment-path", type=click.Path(), required=True)
+@click.option("--restore-path", type=click.Path())
+@click.option("--render", is_flag=True)
 def main(config_path, **kwargs):
-    config = load_config(
-        config_path,
-        **kwargs)
+    config = load_config(config_path, **kwargs)
     del config_path, kwargs
 
     writer = SummaryWriter(config.experiment_path)
@@ -60,18 +58,18 @@ def main(config_path, **kwargs):
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, config.episodes)
 
     metrics = {
-        'loss': Mean(),
-        'lr': Last(),
-        'eps': FPS(),
-        'ep/length': Mean(),
-        'ep/return': Mean(),
-        'rollout/reward': Mean(),
-        'rollout/advantage': Mean(),
-        'rollout/entropy': Mean(),
+        "loss": Mean(),
+        "lr": Last(),
+        "eps": FPS(),
+        "ep/length": Mean(),
+        "ep/return": Mean(),
+        "rollout/reward": Mean(),
+        "rollout/advantage": Mean(),
+        "rollout/entropy": Mean(),
     }
 
     # training loop ====================================================================================================
-    for episode in tqdm(range(config.episodes), desc='training'):
+    for episode in tqdm(range(config.episodes), desc="training"):
         hist = History()
         s = env.reset()
         h = model.zero_state(1)
@@ -101,8 +99,8 @@ def main(config_path, **kwargs):
         loss = compute_loss(env, model, rollout, metrics, config)
 
         # metrics
-        metrics['loss'].update(loss.data.cpu().numpy())
-        metrics['lr'].update(np.squeeze(scheduler.get_last_lr()))
+        metrics["loss"].update(loss.data.cpu().numpy())
+        metrics["lr"].update(np.squeeze(scheduler.get_last_lr()))
 
         # training
         optimizer.zero_grad()
@@ -112,16 +110,17 @@ def main(config_path, **kwargs):
         optimizer.step()
         scheduler.step()
 
-        metrics['eps'].update(1)
-        metrics['ep/length'].update(info[0]['episode']['l'])
-        metrics['ep/return'].update(info[0]['episode']['r'])
+        metrics["eps"].update(1)
+        metrics["ep/length"].update(info[0]["episode"]["l"])
+        metrics["ep/return"].update(info[0]["episode"]["r"])
 
         if episode % config.log_interval == 0 and episode > 0:
             for k in metrics:
                 writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
             torch.save(
                 model.state_dict(),
-                os.path.join(config.experiment_path, 'model_{}.pth'.format(episode)))
+                os.path.join(config.experiment_path, "model_{}.pth".format(episode)),
+            )
 
 
 def compute_loss(env, model, rollout, metrics, config):
@@ -140,19 +139,18 @@ def compute_loss(env, model, rollout, metrics, config):
         log_prob = log_prob.sum(-1)
         entropy = entropy.sum(-1)
 
-    actor_loss = -log_prob * advantages + \
-                 config.entropy_weight * -entropy
+    actor_loss = -log_prob * advantages + config.entropy_weight * -entropy
 
     # loss
     loss = actor_loss.mean(1)
 
     # metrics
-    metrics['rollout/reward'].update(rollout.reward.data.cpu().numpy())
-    metrics['rollout/advantage'].update(advantages.data.cpu().numpy())
-    metrics['rollout/entropy'].update(entropy.data.cpu().numpy())
+    metrics["rollout/reward"].update(rollout.reward.data.cpu().numpy())
+    metrics["rollout/advantage"].update(advantages.data.cpu().numpy())
+    metrics["rollout/entropy"].update(entropy.data.cpu().numpy())
 
     return loss
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

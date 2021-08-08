@@ -17,7 +17,7 @@ class GridWorld(gym.ObservationWrapper):
         return super().step(action)
 
     def observation(self, obs):
-        image = obs['image'][:, :, 0].astype(np.int64)
+        image = obs["image"][:, :, 0].astype(np.int64)
 
         return image
 

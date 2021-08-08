@@ -34,10 +34,15 @@ class Agent(nn.Module):
             nn.LeakyReLU(0.2),
         )
         self.rnn = nn.LSTMCell(64, 64)
-        self.action_value = nn.Sequential(
+        self.dist = nn.Sequential(
             nn.Linear(64, 64),
             nn.Tanh(),
             nn.Linear(64, action_space.n),
+        )
+        self.value = nn.Sequential(
+            nn.Linear(64, 64),
+            nn.Tanh(),
+            nn.Linear(64, 1),
         )
 
         self.apply(self.weight_init)
@@ -50,9 +55,10 @@ class Agent(nn.Module):
         state = self.rnn(input, state)
         input, _ = state
 
-        action_value = self.action_value(input)
+        dist = torch.distributions.Categorical(logits=self.dist(input))
+        value = self.value(input).squeeze(1)
 
-        return action_value, state
+        return dist, value, state
 
     def zero_state(self, batch_size):
         zeros = torch.zeros(batch_size, 64)
@@ -78,7 +84,7 @@ def main(**kwargs):
         discount=0.99,
         num_episodes=100000,
         num_workers=8,
-        e_greedy_eps=0.9,
+        entropy_weight=1e-2,
     )
     for k in kwargs:
         config[k] = kwargs[k]
@@ -105,9 +111,10 @@ def main(**kwargs):
         for i in range(config.horizon):
             transition = history.append_transition()
 
-            action_value, state_prime = model(obs, state)
-            action = select_action(action_value, eps=config.e_greedy_eps)
-            transition.record(action_value_i=select_action_value(action_value, action))
+            dist, value, state_prime = model(obs, state)
+            transition.record(value=value, entropy=dist.entropy())
+            action = select_action(dist)
+            transition.record(action_log_prob=dist.log_prob(action))
 
             obs_prime, reward, done, info = env.step(action)
             transition.record(reward=reward, done=done)
@@ -125,28 +132,32 @@ def main(**kwargs):
 
         rollout = history.build()
 
-        action_value_prime, _ = model(obs_prime, state_prime)
-        action_prime = select_action(action_value_prime, eps=config.e_greedy_eps)
+        _, value_prime, _ = model(obs_prime, state_prime)
 
         return_ = compute_n_step_discounted_return(
             reward_t=rollout.reward,
-            value_prime=select_action_value(action_value_prime, action_prime).detach(),
+            value_prime=value_prime.detach(),
             done_t=rollout.done,
             gamma=config.discount,
         )
 
-        td_error = rollout.action_value_i - return_
-        loss = td_error.pow(2)
+        td_error = rollout.value - return_
+        critic_loss = td_error.pow(2)
+        actor_loss = (
+            -rollout.action_log_prob * td_error.detach() - config.entropy_weight * rollout.entropy
+        )
+        loss = actor_loss + 0.5 * critic_loss
 
         optimizer.zero_grad()
         loss.mean().backward()
         optimizer.step()
 
-        writer.add_scalar(
-            "rollout/action_value_i", rollout.action_value_i.mean(), global_step=episode
-        )
+        writer.add_scalar("rollout/value", rollout.value.mean(), global_step=episode)
         writer.add_scalar("rollout/td_error", td_error.mean(), global_step=episode)
         writer.add_scalar("rollout/loss", loss.mean(), global_step=episode)
+        writer.add_scalar("rollout/actor_loss", actor_loss.mean(), global_step=episode)
+        writer.add_scalar("rollout/critic_loss", critic_loss.mean(), global_step=episode)
+        writer.add_scalar("rollout/entropy", rollout.entropy.mean(), global_step=episode)
 
     env.close()
     writer.close()
@@ -159,21 +170,11 @@ def build_env():
     env = gym_minigrid.wrappers.OneHotPartialObsWrapper(env)
     env = gym_minigrid.wrappers.ImgObsWrapper(env)
     env = gym.wrappers.RecordEpisodeStatistics(env)
-
     return env
 
 
-def select_action(action_value, eps):
-    b, n = action_value.shape
-    argmax = action_value.argmax(1)
-    mask = torch.rand(size=[b]) < eps
-    action = torch.where(mask, argmax, torch.randint(0, n, size=[b]))
-    return action
-
-
-def select_action_value(action_value, action):
-    b, n = action_value.shape
-    return action_value[torch.arange(b), action]
+def select_action(dist: torch.distributions.Distribution):
+    return dist.sample()
 
 
 if __name__ == "__main__":

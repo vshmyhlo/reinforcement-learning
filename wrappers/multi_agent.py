@@ -31,7 +31,7 @@ class MultiAgent(gym.Wrapper):
 
         return state, reward, done, meta
 
-    def render(self, mode='human', index=0, **kwargs):
+    def render(self, mode="human", index=0, **kwargs):
         assert index in [0, 1]
 
         return super().render(mode, **kwargs)

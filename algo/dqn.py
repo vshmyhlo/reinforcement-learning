@@ -20,7 +20,7 @@ from vec_env import VecEnv
 
 gym_minigrid
 
-DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 # TODO: revisit stat calculation
@@ -30,9 +30,9 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 def build_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--experiment-path', type=str, default='./tf_log/pg-mc')
-    parser.add_argument('--config-path', type=str, required=True)
-    parser.add_argument('--no-render', action='store_true')
+    parser.add_argument("--experiment-path", type=str, default="./tf_log/pg-mc")
+    parser.add_argument("--config-path", type=str, required=True)
+    parser.add_argument("--no-render", action="store_true")
 
     return parser
 
@@ -42,9 +42,8 @@ def sample_action(action_value, e):
     random = torch.full_like(greedy, 1 / action_value.size(-1))
 
     probs = torch.where(
-        torch.empty(greedy.size(0), 1, device=greedy.device).uniform_() > e,
-        greedy,
-        random)
+        torch.empty(greedy.size(0), 1, device=greedy.device).uniform_() > e, greedy, random
+    )
 
     dist = torch.distributions.Categorical(probs=probs)
 
@@ -63,9 +62,7 @@ def main():
     writer = SummaryWriter(config.experiment_path)
 
     seed_torch(config.seed)
-    env = VecEnv([
-        lambda: build_env(config)
-        for _ in range(config.workers)])
+    env = VecEnv([lambda: build_env(config) for _ in range(config.workers)])
     if config.render:
         env = wrappers.TensorboardBatchMonitor(env, writer, config.log_interval)
     env = wrappers.torch.Torch(env, device=DEVICE)
@@ -78,11 +75,11 @@ def main():
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, config.episodes)
 
     metrics = {
-        'loss': Mean(),
-        'lr': Last(),
-        'eps': FPS(),
-        'ep/length': Mean(),
-        'ep/reward': Mean(),
+        "loss": Mean(),
+        "lr": Last(),
+        "eps": FPS(),
+        "ep/length": Mean(),
+        "ep/reward": Mean(),
     }
 
     # ==================================================================================================================
@@ -94,23 +91,29 @@ def main():
     e_base = 0.95
     e_step = np.exp(np.log(0.05 / e_base) / config.episodes)
 
-    bar = tqdm(total=config.episodes, desc='training')
+    bar = tqdm(total=config.episodes, desc="training")
     history = History()
     while episode < config.episodes:
         with torch.no_grad():
             for _ in range(config.horizon):
                 av = policy_model(s)
-                a = sample_action(av, e_base * e_step**episode)
+                a = sample_action(av, e_base * e_step ** episode)
                 s_prime, r, d, meta = env.step(a)
-                history.append(state=s.cpu(), action=a.cpu(), reward=r.cpu(), done=d.cpu(), state_prime=s_prime.cpu())
+                history.append(
+                    state=s.cpu(),
+                    action=a.cpu(),
+                    reward=r.cpu(),
+                    done=d.cpu(),
+                    state_prime=s_prime.cpu(),
+                )
                 # history.append(state=s, action=a, reward=r, done=d, state_prime=s_prime)
                 s = s_prime
 
-                indices, = torch.where(d)
+                (indices,) = torch.where(d)
                 for i in indices:
-                    metrics['eps'].update(1)
-                    metrics['ep/length'].update(meta[i]['episode']['l'])
-                    metrics['ep/reward'].update(meta[i]['episode']['r'])
+                    metrics["eps"].update(1)
+                    metrics["ep/length"].update(meta[i]["episode"]["l"])
+                    metrics["ep/reward"].update(meta[i]["episode"]["r"])
                     episode += 1
                     scheduler.step()
                     bar.update(1)
@@ -120,12 +123,20 @@ def main():
 
                     if episode % config.log_interval == 0 and episode > 0:
                         for k in metrics:
-                            writer.add_scalar(k, metrics[k].compute_and_reset(), global_step=episode)
-                        writer.add_scalar('e', e_base * e_step**episode, global_step=episode)
-                        writer.add_histogram('rollout/action', rollout.actions, global_step=episode)
-                        writer.add_histogram('rollout/reward', rollout.rewards, global_step=episode)
-                        writer.add_histogram('rollout/return', returns, global_step=episode)
-                        writer.add_histogram('rollout/action_value', action_values, global_step=episode)
+                            writer.add_scalar(
+                                k, metrics[k].compute_and_reset(), global_step=episode
+                            )
+                        writer.add_scalar("e", e_base * e_step ** episode, global_step=episode)
+                        writer.add_histogram(
+                            "rollout/action", rollout.actions, global_step=episode
+                        )
+                        writer.add_histogram(
+                            "rollout/reward", rollout.rewards, global_step=episode
+                        )
+                        writer.add_histogram("rollout/return", returns, global_step=episode)
+                        writer.add_histogram(
+                            "rollout/action_value", action_values, global_step=episode
+                        )
 
         rollout = history.full_rollout()
         action_values = policy_model(rollout.states)
@@ -134,16 +145,18 @@ def main():
         with torch.no_grad():
             action_values_prime = target_model(rollout.states_prime)
             action_values_prime, _ = action_values_prime.detach().max(-1)
-        returns = one_step_discounted_return(rollout.rewards, action_values_prime, rollout.dones, gamma=config.gamma)
+        returns = one_step_discounted_return(
+            rollout.rewards, action_values_prime, rollout.dones, gamma=config.gamma
+        )
 
         # critic
         errors = returns - action_values
-        critic_loss = errors**2
+        critic_loss = errors ** 2
 
         loss = (critic_loss * 0.5).mean(1)
 
-        metrics['loss'].update(loss.data.cpu().numpy())
-        metrics['lr'].update(np.squeeze(scheduler.get_lr()))
+        metrics["loss"].update(loss.data.cpu().numpy())
+        metrics["lr"].update(np.squeeze(scheduler.get_lr()))
 
         # training
         optimizer.zero_grad()
@@ -155,5 +168,5 @@ def main():
     env.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
