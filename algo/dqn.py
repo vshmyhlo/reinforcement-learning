@@ -5,18 +5,18 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim
-from all_the_tools.metrics import Mean, FPS, Last
-from all_the_tools.torch.utils import seed_torch, one_hot
+from all_the_tools.metrics import FPS, Last, Mean
+from all_the_tools.torch.utils import one_hot, seed_torch
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
 import wrappers.torch
-from algo.common import build_optimizer, build_env
+from algo.common import build_env, build_optimizer
 from history import History
 from model import ModelDQN
 from utils import one_step_discounted_return
-from vec_env import VecEnv
+from vec_env_parallel import VecEnv
 
 gym_minigrid
 

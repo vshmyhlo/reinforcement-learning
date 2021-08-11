@@ -12,8 +12,8 @@ from tqdm import tqdm
 
 import wrappers
 from history import History
-from utils import compute_n_step_discounted_return
-from vec_env import VecEnv
+from utils import n_step_bootstrapped_return
+from vec_env_parallel import VecEnv
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -128,7 +128,7 @@ def main(**kwargs):
         action_value_prime, _ = model(obs_prime, state_prime)
         action_prime = select_action(action_value_prime, eps=config.e_greedy_eps)
 
-        return_ = compute_n_step_discounted_return(
+        return_ = n_step_bootstrapped_return(
             reward_t=rollout.reward,
             value_prime=select_action_value(action_value_prime, action_prime).detach(),
             done_t=rollout.done,

@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 import wrappers
 from history import History
-from utils import compute_n_step_discounted_return
+from utils import n_step_bootstrapped_return
 
 Output = namedtuple("Output", ["dist", "value"])
 
@@ -66,7 +66,7 @@ def main():
 
         history = history.build()
 
-        return_ = compute_n_step_discounted_return(
+        return_ = n_step_bootstrapped_return(
             history.reward, output_prime.value.detach(), history.done, config.discount
         )
 

@@ -18,8 +18,8 @@ import wrappers
 from algo.common import build_env, build_optimizer
 from history import History
 from model import Model
-from utils import compute_n_step_discounted_return
-from vec_env import VecEnv
+from utils import n_step_bootstrapped_return
+from vec_env_parallel import VecEnv
 
 pybulletgym
 
@@ -119,7 +119,7 @@ def main(config_path, **kwargs):
         dist, values = model(rollout.states)
         with torch.no_grad():
             _, value_prime = model(rollout.states_prime[:, -1])
-            returns = compute_n_step_discounted_return(
+            returns = n_step_bootstrapped_return(
                 rollout.rewards, value_prime, rollout.dones, gamma=config.gamma
             )
 

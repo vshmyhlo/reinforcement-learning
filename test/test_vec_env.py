@@ -1,7 +1,7 @@
 import gym
 import numpy as np
 
-from vec_env import VecEnv
+from vec_env_parallel import VecEnv
 
 
 class Env(gym.Env):

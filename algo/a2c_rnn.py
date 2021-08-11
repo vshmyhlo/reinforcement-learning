@@ -20,7 +20,7 @@ import wrappers
 from algo.common import build_env, build_optimizer
 from history import History
 from model import Model
-from vec_env import VecEnv
+from vec_env_parallel import VecEnv
 
 pybulletgym
 gym_minigrid
@@ -154,7 +154,7 @@ def compute_loss(env, model, rollout, metrics, config):
         _, value_prime, _ = model(
             rollout.state_prime[:, -1], hidden, rollout.done_prime[:, -1]
         )
-        returns = utils.compute_n_step_discounted_return(
+        returns = utils.n_step_bootstrapped_return(
             rollout.reward, value_prime, rollout.done_prime, gamma=config.gamma
         )
 
