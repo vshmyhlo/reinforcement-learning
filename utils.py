@@ -26,7 +26,12 @@ def total_discounted_return(reward_t, gamma: float):
     return return_t
 
 
-def n_step_bootstrapped_return(reward_t, done_t, value_prime, gamma):
+def n_step_bootstrapped_return(
+    reward_t,
+    done_t,
+    value_prime,
+    gamma,
+):
     assert shape_matches(reward_t, done_t, dim=2)
     assert shape_matches(value_prime, dim=1)
 
@@ -64,7 +69,7 @@ def generalized_advantage_estimation(reward_t, value_t, value_prime, done_t, gam
     return gae_t
 
 
-def compute_n_step_lambda_bootstrapped_return(
+def n_step_lambda_bootstrapped_return(
     reward_t,
     value_t,
     value_prime,
@@ -131,3 +136,23 @@ def random_seed(seed: int):
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
+
+
+# TODO: test
+def average_reward_return(
+    reward_t,
+    done_t,
+    value_prime,
+    reward_average,
+):
+    mask_t = (~done_t).float()
+    return_ = value_prime
+    return_t = torch.zeros_like(reward_t)
+
+    for t in reversed(range(reward_t.size(1))):
+        return_ = reward_t[:, t] + mask_t[:, t] * return_
+        return_t[:, t] = return_
+
+    return_t -= reward_average
+
+    return return_t

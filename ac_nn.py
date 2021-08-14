@@ -1,17 +1,15 @@
-from collections import namedtuple
-
 import click
 import gym
 import gym_minigrid
 import torch
-import torch.nn as nn
 from all_the_tools.config import Config as C
-from all_the_tools.meters import Mean, Stack
+from all_the_tools.meters import Stack
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import utils
 import wrappers
+from agent import Agent
 from history import History
 from vec_env_serial import VecEnv
 
@@ -30,67 +28,12 @@ torch.autograd.set_detect_anomaly(True)
  one may consider letting the network run through h0 additional time steps before performing the next BPTT computation, where h0 <= h.
 """
 
+# TODO: average reward
+# TODO: obs normalization
+# TODO: critic loss scale
 
-class Agent(nn.Module):
-    def __init__(self, observation_space, action_space: gym.spaces.Discrete):
-        super().__init__()
-
-        self.obs_embedding = nn.Sequential(
-            nn.Conv2d(20, 16, (2, 2)),
-            nn.LeakyReLU(0.2),
-            nn.MaxPool2d((2, 2)),
-            #
-            nn.Conv2d(16, 32, (2, 2)),
-            nn.LeakyReLU(0.2),
-            #
-            nn.Conv2d(32, 64, (2, 2)),
-            nn.LeakyReLU(0.2),
-        )
-        self.action_embedding = nn.Embedding(action_space.n, 64)
-        self.rnn = nn.LSTMCell(64, 64)
-        self.dist = nn.Sequential(
-            nn.Linear(64, 64),
-            nn.Tanh(),
-            nn.Linear(64, action_space.n),
-        )
-        self.value = nn.Sequential(
-            nn.Linear(64, 64),
-            nn.Tanh(),
-            nn.Linear(64, 1),
-        )
-
-        self.apply(self.weight_init)
-
-    def forward(self, obs, action, memory):
-        obs = obs.float().permute(0, 3, 1, 2)
-        obs = self.obs_embedding(obs)
-        obs = obs.view(obs.size(0), obs.size(1))
-
-        action = self.action_embedding(action)
-
-        emb = obs + action
-        memory = self.rnn(emb, memory)
-        emb, _ = memory
-
-        dist = torch.distributions.Categorical(logits=self.dist(emb))
-        value = self.value(emb).squeeze(1)
-
-        return dist, value, memory
-
-    def zero_memory(self, batch_size):
-        zeros = torch.zeros(batch_size, 64)
-        state = (zeros, zeros)
-        return state
-
-    def reset_memory(self, state, done):
-        done = done.unsqueeze(1)
-        state = tuple(torch.where(done, torch.zeros_like(x), x) for x in state)
-        return state
-
-    def weight_init(self, m):
-        if isinstance(m, (nn.Linear, nn.Conv2d)):
-            nn.init.normal_(m.weight, 0, 0.01)
-            nn.init.constant_(m.bias, 0)
+# TODO: log training steps
+# TODO: log finished eps as a function of opt steps
 
 
 @click.command()
@@ -148,6 +91,8 @@ def main(**kwargs):
     action = torch.zeros(config.num_workers, dtype=torch.int)
     memory = agent.zero_memory(config.num_workers)
 
+    reward_average = 0
+
     while episode < config.num_episodes:
         history = History()
         memory = tuple(x.detach() for x in memory)
@@ -200,17 +145,27 @@ def main(**kwargs):
         #     gamma=config.discount,
         # )
 
-        value_target = utils.generalized_advantage_estimation(
+        # advantage = utils.generalized_advantage_estimation(
+        #     reward_t=rollout.reward,
+        #     value_t=rollout.value.detach(),
+        #     value_prime=value_prime.detach(),
+        #     done_t=rollout.done,
+        #     gamma=config.discount,
+        #     lambda_=0.96,
+        # )
+        # value_target = advantage + rollout.value.detach()
+
+        value_target = utils.average_reward_return(
             reward_t=rollout.reward,
-            value_t=rollout.value.detach(),
-            value_prime=value_prime.detach(),
             done_t=rollout.done,
-            gamma=config.discount,
-            lambda_=0.96,
+            value_prime=value_prime.detach(),
+            reward_average=reward_average,
         )
-        value_target += rollout.value.detach()
 
         td_error = value_target - rollout.value
+
+        reward_average += config.learning_rate * td_error.detach().sum(1).mean()
+
         critic_loss = td_error.pow(2)
         actor_loss = (
             -rollout.log_prob * td_error.detach() - config.entropy_weight * rollout.entropy
@@ -219,7 +174,6 @@ def main(**kwargs):
 
         optimizer.zero_grad()
         loss.sum(1).mean().backward()
-        # nn.utils.clip_grad_norm_(agent.parameters(), 0.01)
         optimizer.step()
         opt_step += 1
 

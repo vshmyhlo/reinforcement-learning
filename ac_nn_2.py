@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 import utils
 import wrappers
+from agent import Agent
 from history import History
 from vec_env_serial import VecEnv
 
@@ -29,68 +30,6 @@ torch.autograd.set_detect_anomaly(True)
  a backward pass through the most recent h time steps is performed anew each time the network is run through an additional time step
  one may consider letting the network run through h0 additional time steps before performing the next BPTT computation, where h0 <= h.
 """
-
-
-class Agent(nn.Module):
-    def __init__(self, observation_space, action_space: gym.spaces.Discrete):
-        super().__init__()
-
-        self.obs_embedding = nn.Sequential(
-            nn.Conv2d(20, 16, (2, 2)),
-            nn.LeakyReLU(0.2),
-            nn.MaxPool2d((2, 2)),
-            #
-            nn.Conv2d(16, 32, (2, 2)),
-            nn.LeakyReLU(0.2),
-            #
-            nn.Conv2d(32, 64, (2, 2)),
-            nn.LeakyReLU(0.2),
-        )
-        self.action_embedding = nn.Embedding(action_space.n, 64)
-        self.rnn = nn.LSTMCell(64, 64)
-        self.dist = nn.Sequential(
-            nn.Linear(64, 64),
-            nn.Tanh(),
-            nn.Linear(64, action_space.n),
-        )
-        self.value = nn.Sequential(
-            nn.Linear(64, 64),
-            nn.Tanh(),
-            nn.Linear(64, 1),
-        )
-
-        self.apply(self.weight_init)
-
-    def forward(self, obs, action, memory):
-        obs = obs.float().permute(0, 3, 1, 2)
-        obs = self.obs_embedding(obs)
-        obs = obs.view(obs.size(0), obs.size(1))
-
-        action = self.action_embedding(action)
-
-        emb = obs + action
-        memory = self.rnn(emb, memory)
-        emb, _ = memory
-
-        dist = torch.distributions.Categorical(logits=self.dist(emb))
-        value = self.value(emb).squeeze(1)
-
-        return dist, value, memory
-
-    def zero_memory(self, batch_size):
-        zeros = torch.zeros(batch_size, 64)
-        state = (zeros, zeros)
-        return state
-
-    def reset_memory(self, state, done):
-        done = done.unsqueeze(1)
-        state = tuple(torch.where(done, torch.zeros_like(x), x) for x in state)
-        return state
-
-    def weight_init(self, m):
-        if isinstance(m, (nn.Linear, nn.Conv2d)):
-            nn.init.normal_(m.weight, 0, 0.01)
-            nn.init.constant_(m.bias, 0)
 
 
 @click.command()
@@ -149,45 +88,9 @@ def main(**kwargs):
     memory = agent.zero_memory(config.num_workers)
 
     while episode < config.num_episodes:
-        history = History()
         memory = tuple(x.detach() for x in memory)
 
-        for i in range(config.horizon):
-            transition = history.append_transition()
-
-            dist, value, memory_prime = agent(obs, action, memory)
-            transition.record(value=value, entropy=dist.entropy())
-            action = select_action(dist)
-            transition.record(log_prob=dist.log_prob(action))
-
-            obs_prime, reward, done, info = env.step(action)
-            transition.record(reward=reward, done=done)
-            memory_prime = agent.reset_memory(memory_prime, done)
-
-            obs, memory = obs_prime, memory_prime
-
-            for i in info:
-                if "episode" not in i:
-                    continue
-                episode += 1
-
-                metrics["episode/return"].update(i["episode"]["r"])
-                metrics["episode/length"].update(i["episode"]["l"])
-
-                if episode % config.log_interval == 0:
-                    print("log episode")
-
-                    for k in [
-                        "episode/return",
-                        "episode/length",
-                    ]:
-                        v = metrics[k].compute_and_reset()
-                        writer.add_scalar(f"{k}/mean", v.mean(), global_step=episode)
-                        writer.add_histogram(f"{k}/hist", v, global_step=episode)
-
-                    writer.flush()
-
-                pbar.update()
+        history = collect_rollout()
 
         rollout = history.build()
 
@@ -269,6 +172,48 @@ def main(**kwargs):
 
     env.close()
     writer.close()
+
+
+def collect_rollout(config):
+    history = History()
+    episode_stats = []
+
+    for i in range(config.horizon):
+        transition = history.append_transition()
+
+        dist, value, memory_prime = agent(obs, action, memory)
+        transition.record(value=value, entropy=dist.entropy())
+        action = select_action(dist)
+        transition.record(log_prob=dist.log_prob(action))
+
+        obs_prime, reward, done, info = env.step(action)
+        transition.record(reward=reward, done=done)
+        memory_prime = agent.reset_memory(memory_prime, done)
+
+        obs, memory = obs_prime, memory_prime
+
+        for i in info:
+            if "episode" not in i:
+                continue
+            episode += 1
+
+            metrics["episode/return"].update(i["episode"]["r"])
+            metrics["episode/length"].update(i["episode"]["l"])
+
+            if episode % config.log_interval == 0:
+                print("log episode")
+
+                for k in [
+                    "episode/return",
+                    "episode/length",
+                ]:
+                    v = metrics[k].compute_and_reset()
+                    writer.add_scalar(f"{k}/mean", v.mean(), global_step=episode)
+                    writer.add_histogram(f"{k}/hist", v, global_step=episode)
+
+                writer.flush()
+
+            pbar.update()
 
 
 def build_env():

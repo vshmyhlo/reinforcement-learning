@@ -11,63 +11,12 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 import wrappers
+from agent import Agent
 from history import History
 from utils import n_step_bootstrapped_return
 from vec_env_parallel import VecEnv
 
 torch.autograd.set_detect_anomaly(True)
-
-
-class Agent(nn.Module):
-    def __init__(self, observation_space, action_space: gym.spaces.Discrete):
-        super().__init__()
-
-        self.embedding = nn.Sequential(
-            nn.Conv2d(20, 16, (2, 2)),
-            nn.LeakyReLU(0.2),
-            nn.MaxPool2d((2, 2)),
-            #
-            nn.Conv2d(16, 32, (2, 2)),
-            nn.LeakyReLU(0.2),
-            #
-            nn.Conv2d(32, 64, (2, 2)),
-            nn.LeakyReLU(0.2),
-        )
-        self.rnn = nn.LSTMCell(64, 64)
-        self.action_value = nn.Sequential(
-            nn.Linear(64, 64),
-            nn.Tanh(),
-            nn.Linear(64, action_space.n),
-        )
-
-        self.apply(self.weight_init)
-
-    def forward(self, input, state):
-        input = input.float().permute(0, 3, 1, 2)
-        input = self.embedding(input)
-        input = input.view(input.size(0), input.size(1))
-
-        state = self.rnn(input, state)
-        input, _ = state
-
-        action_value = self.action_value(input)
-
-        return action_value, state
-
-    def zero_state(self, batch_size):
-        zeros = torch.zeros(batch_size, 64)
-        state = (zeros, zeros)
-        return state
-
-    def reset_state(self, state, done):
-        done = done.unsqueeze(1)
-        state = tuple(torch.where(done, torch.zeros_like(x), x) for x in state)
-        return state
-
-    def weight_init(self, m):
-        if isinstance(m, (nn.Linear, nn.Conv2d)):
-            nn.init.normal_(m.weight, 0, 0.01)
-            nn.init.constant_(m.bias, 0)
 
 
 @click.command()
@@ -153,13 +102,22 @@ def main(**kwargs):
 
 
 def build_env():
+    def scale_reward(r):
+        return r
+        # return r * 5
+        # return r * 10 - 0.02
+
     # env = gym.make("CartPole-v1")
     env = "MiniGrid-Empty-Random-6x6-v0"
+    # env = "MiniGrid-FourRooms-v0"
+    # env = "MiniGrid-Dynamic-Obstacles-8x8-v0"
     env = gym.make(env)
+    env = wrappers.RandomFirstReset(env, 256)
     env = gym_minigrid.wrappers.OneHotPartialObsWrapper(env)
     env = gym_minigrid.wrappers.ImgObsWrapper(env)
+    env = gym.wrappers.TransformReward(env, scale_reward)
+    env.reward_range = tuple(map(scale_reward, env.reward_range))
     env = gym.wrappers.RecordEpisodeStatistics(env)
-
     return env
 
 
