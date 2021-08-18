@@ -155,7 +155,7 @@ def compute_loss(env, model, rollout, metrics, config):
             rollout.state_prime[:, -1], hidden, rollout.done_prime[:, -1]
         )
         returns = utils.n_step_bootstrapped_return(
-            rollout.reward, value_prime, rollout.done_prime, gamma=config.gamma
+            rollout.reward, value_prime, rollout.done_prime, discount=config.gamma
         )
 
     # critic

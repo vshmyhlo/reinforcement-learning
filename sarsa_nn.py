@@ -81,7 +81,7 @@ def main(**kwargs):
             reward_t=rollout.reward,
             value_prime=select_action_value(action_value_prime, action_prime).detach(),
             done_t=rollout.done,
-            gamma=config.discount,
+            discount=config.discount,
         )
 
         td_error = rollout.action_value_i - return_

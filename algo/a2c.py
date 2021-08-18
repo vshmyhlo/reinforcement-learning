@@ -120,7 +120,7 @@ def main(config_path, **kwargs):
         with torch.no_grad():
             _, value_prime = model(rollout.states_prime[:, -1])
             returns = n_step_bootstrapped_return(
-                rollout.rewards, value_prime, rollout.dones, gamma=config.gamma
+                rollout.rewards, value_prime, rollout.dones, discount=config.gamma
             )
 
         # critic

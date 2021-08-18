@@ -1,6 +1,13 @@
 import torch
 
-import utils as utils
+import utils
+
+
+def test_moving_average():
+    ma = utils.MovingAverage(0.9)
+    assert ma.update(10) == 10
+    assert ma.update(10) == 10
+    assert ma.update(10) == 10
 
 
 def test_total_discounted_return():
@@ -16,7 +23,7 @@ def test_n_step_bootstrapped_return():
     done_t = torch.tensor([[False, False, True]])
     value_prime = torch.tensor([4.0])
 
-    actual = utils.n_step_bootstrapped_return(reward_t, done_t, value_prime, gamma=0.9)
+    actual = utils.n_step_bootstrapped_return(reward_t, done_t, value_prime, discount=0.9)
     expected = torch.tensor([[5.23, 4.7, 3]])
 
     assert torch.allclose(actual, expected)
@@ -27,7 +34,7 @@ def test_n_step_bootstrapped_return_2():
     done_t = torch.tensor([[False, False, True, False, False, False]])
     value_prime = torch.tensor([4.0])
 
-    actual = utils.n_step_bootstrapped_return(reward_t, done_t, value_prime, gamma=0.9)
+    actual = utils.n_step_bootstrapped_return(reward_t, done_t, value_prime, discount=0.9)
     expected = torch.tensor([[5.23, 4.7, 3, 8.146, 7.94, 6.6]])
 
     assert torch.allclose(actual, expected)

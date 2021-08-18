@@ -4,6 +4,18 @@ import numpy as np
 import torch
 
 
+class MovingAverage:
+    def __init__(self, beta):
+        self.beta = beta
+        self.value = 0
+        self.n = 0
+
+    def update(self, value):
+        self.value = self.beta * self.value + (1 - self.beta) * value
+        self.n += 1
+        return self.value / (1 - self.beta ** self.n)
+
+
 def shape_matches(*args, dim):
     match = True
     for i in range(len(args)):
@@ -30,7 +42,7 @@ def n_step_bootstrapped_return(
     reward_t,
     done_t,
     value_prime,
-    gamma,
+    discount,
 ):
     assert shape_matches(reward_t, done_t, dim=2)
     assert shape_matches(value_prime, dim=1)
@@ -40,7 +52,7 @@ def n_step_bootstrapped_return(
     return_t = torch.zeros_like(reward_t)
 
     for t in reversed(range(reward_t.size(1))):
-        return_ = reward_t[:, t] + mask_t[:, t] * gamma * return_
+        return_ = reward_t[:, t] + mask_t[:, t] * discount * return_
         return_t[:, t] = return_
 
     return return_t
@@ -139,20 +151,18 @@ def random_seed(seed: int):
 
 
 # TODO: test
-def average_reward_return(
+def differential_n_step_bootstrapped_return(
     reward_t,
     done_t,
     value_prime,
-    reward_average,
+    average_reward,
 ):
     mask_t = (~done_t).float()
     return_ = value_prime
     return_t = torch.zeros_like(reward_t)
 
     for t in reversed(range(reward_t.size(1))):
-        return_ = reward_t[:, t] + mask_t[:, t] * return_
+        return_ = reward_t[:, t] - average_reward + mask_t[:, t] * return_
         return_t[:, t] = return_
-
-    return_t -= reward_average
 
     return return_t

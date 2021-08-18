@@ -34,6 +34,7 @@ torch.autograd.set_detect_anomaly(True)
 
 # TODO: log training steps
 # TODO: log finished eps as a function of opt steps
+# TODO: how average reward is derived
 
 
 @click.command()
@@ -67,6 +68,7 @@ def main(**kwargs):
     optimizer = torch.optim.Adam(
         agent.parameters(), config.learning_rate * config.num_workers, betas=(0.0, 0.999)
     )
+    average_reward = 0
 
     # train
     metrics = {
@@ -90,8 +92,6 @@ def main(**kwargs):
     obs = env.reset()
     action = torch.zeros(config.num_workers, dtype=torch.int)
     memory = agent.zero_memory(config.num_workers)
-
-    reward_average = 0
 
     while episode < config.num_episodes:
         history = History()
@@ -142,7 +142,7 @@ def main(**kwargs):
         #     reward_t=rollout.reward,
         #     done_t=rollout.done,
         #     value_prime=value_prime.detach(),
-        #     gamma=config.discount,
+        #     discount=config.discount,
         # )
 
         # advantage = utils.generalized_advantage_estimation(
@@ -155,16 +155,14 @@ def main(**kwargs):
         # )
         # value_target = advantage + rollout.value.detach()
 
-        value_target = utils.average_reward_return(
+        value_target = utils.differential_n_step_bootstrapped_return(
             reward_t=rollout.reward,
             done_t=rollout.done,
             value_prime=value_prime.detach(),
-            reward_average=reward_average,
+            average_reward=average_reward,
         )
 
         td_error = value_target - rollout.value
-
-        reward_average += config.learning_rate * td_error.detach().sum(1).mean()
 
         critic_loss = td_error.pow(2)
         actor_loss = (
@@ -175,6 +173,7 @@ def main(**kwargs):
         optimizer.zero_grad()
         loss.sum(1).mean().backward()
         optimizer.step()
+        average_reward += 0.001 * td_error.detach().sum(1).mean()
         opt_step += 1
 
         metrics["rollout/reward"].update(rollout.reward.detach())
@@ -190,10 +189,11 @@ def main(**kwargs):
             # td_error_std_normalized = td_error.std() / value_target.std()
             print("log rollout")
 
-            total_norm = torch.norm(
+            writer.add_scalar("rollout/average_reward", average_reward, global_step=episode)
+            grad_norm = torch.norm(
                 torch.stack([torch.norm(p.grad.detach(), 2.0) for p in agent.parameters()]), 2.0
             )
-            writer.add_scalar(f"rollout/grad_norm", total_norm, global_step=episode)
+            writer.add_scalar("rollout/grad_norm", grad_norm, global_step=episode)
 
             for k in [
                 "rollout/reward",
