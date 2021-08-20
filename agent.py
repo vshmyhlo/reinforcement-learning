@@ -61,5 +61,5 @@ class Agent(nn.Module):
 
     def weight_init(self, m):
         if isinstance(m, (nn.Linear, nn.Conv2d)):
-            nn.init.normal_(m.weight, 0, 0.01)
+            nn.init.xavier_normal_(m.weight)
             nn.init.constant_(m.bias, 0)

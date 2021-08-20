@@ -1,10 +1,12 @@
 import gym
 import numpy as np
+import pytest
 
-from vec_env_parallel import VecEnv
+from vec_env_parallel import VecEnv as VecEnvParallel
+from vec_env_serial import VecEnv as VecEnvSerial
 
 
-class Env(gym.Env):
+class TestEnv(gym.Env):
     def __init__(self):
         super().__init__()
         self.i = None
@@ -25,8 +27,9 @@ class Env(gym.Env):
 
 
 # TODO: better tests
-def test_vec_env():
-    env = VecEnv([lambda: Env() for _ in range(3)])
+@pytest.mark.parametrize("build_vec_env", [VecEnvSerial, VecEnvParallel])
+def test_vec_env(build_vec_env):
+    env = build_vec_env([TestEnv for _ in range(3)])
 
     history = []
     s = env.reset()

@@ -48,7 +48,9 @@ def main(**kwargs):
         num_episodes=100000,
         num_workers=32,
         entropy_weight=1e-2,
-        log_interval=100,
+        episode_log_interval=100,
+        opt_log_interval=10,
+        average_reward_lr=0.001,
     )
     for k in kwargs:
         config[k] = kwargs[k]
@@ -59,7 +61,7 @@ def main(**kwargs):
     # build env
     env = VecEnv([build_env for _ in range(config.num_workers)])
     env = wrappers.TensorboardBatchMonitor(
-        env, writer, log_interval=config.log_interval, fps_mul=0.5
+        env, writer, log_interval=config.episode_log_interval, fps_mul=0.5
     )
     env = wrappers.Torch(env)
 
@@ -119,7 +121,7 @@ def main(**kwargs):
                 metrics["episode/return"].update(i["episode"]["r"])
                 metrics["episode/length"].update(i["episode"]["l"])
 
-                if episode % config.log_interval == 0:
+                if episode % config.episode_log_interval == 0:
                     print("log episode")
 
                     for k in [
@@ -138,12 +140,12 @@ def main(**kwargs):
 
         _, value_prime, _ = agent(obs_prime, action, memory_prime)
 
-        # value_target = utils.n_step_bootstrapped_return(
-        #     reward_t=rollout.reward,
-        #     done_t=rollout.done,
-        #     value_prime=value_prime.detach(),
-        #     discount=config.discount,
-        # )
+        value_target = utils.n_step_bootstrapped_return(
+            reward_t=rollout.reward,
+            done_t=rollout.done,
+            value_prime=value_prime.detach(),
+            discount=config.discount,
+        )
 
         # advantage = utils.generalized_advantage_estimation(
         #     reward_t=rollout.reward,
@@ -155,25 +157,25 @@ def main(**kwargs):
         # )
         # value_target = advantage + rollout.value.detach()
 
-        value_target = utils.differential_n_step_bootstrapped_return(
-            reward_t=rollout.reward,
-            done_t=rollout.done,
-            value_prime=value_prime.detach(),
-            average_reward=average_reward,
-        )
+        # value_target = utils.differential_n_step_bootstrapped_return(
+        #     reward_t=rollout.reward,
+        #     done_t=rollout.done,
+        #     value_prime=value_prime.detach(),
+        #     average_reward=average_reward,
+        # )
 
         td_error = value_target - rollout.value
 
-        critic_loss = td_error.pow(2)
+        critic_loss = 0.5 * td_error.pow(2)
         actor_loss = (
             -rollout.log_prob * td_error.detach() - config.entropy_weight * rollout.entropy
         )
-        loss = actor_loss + 0.5 * critic_loss
+        loss = actor_loss + critic_loss
 
         optimizer.zero_grad()
         loss.sum(1).mean().backward()
         optimizer.step()
-        average_reward += 0.001 * td_error.detach().sum(1).mean()
+        average_reward += config.average_reward_lr * td_error.detach().sum(1).mean()
         opt_step += 1
 
         metrics["rollout/reward"].update(rollout.reward.detach())
@@ -185,7 +187,7 @@ def main(**kwargs):
         metrics["rollout/critic_loss"].update(critic_loss.detach())
         metrics["rollout/loss"].update(loss.detach())
 
-        if opt_step % 10 == 0:
+        if opt_step % config.opt_log_interval == 0:
             # td_error_std_normalized = td_error.std() / value_target.std()
             print("log rollout")
 
