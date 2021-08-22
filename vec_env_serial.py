@@ -34,7 +34,7 @@ class VecEnv(object):
 
     def seed(self, seed):
         for i, env in enumerate(self.envs):
-            env.seed(seed + i)
+            env.seed(seed + 10000 * i)
 
     def close(self):
         for env in self.envs:

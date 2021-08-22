@@ -91,7 +91,7 @@ class VecEnv(object):
 
     def seed(self, seed):
         for i, conn in enumerate(self.conns):
-            conn.send((Command.SEED, seed + i))
+            conn.send((Command.SEED, seed + 10000 * i))
 
         for conn in self.conns:
             conn.recv()

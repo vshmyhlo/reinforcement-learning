@@ -7,6 +7,7 @@ from all_the_tools.meters import Stack
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
+import envs
 import utils
 import wrappers
 from agent import Agent
@@ -14,6 +15,9 @@ from history import History
 from vec_env_serial import VecEnv
 
 torch.autograd.set_detect_anomaly(True)
+
+# TODO: test memory by remembering sequence of states
+
 
 # TODO: log dist of resets on each step
 # TODO: seed
@@ -43,10 +47,10 @@ def main(**kwargs):
     config = C(
         random_seed=42,
         learning_rate=1e-4,
-        horizon=32,
+        horizon=8,
         discount=0.99,
         num_episodes=100000,
-        num_workers=32,
+        num_workers=16,
         entropy_weight=1e-2,
         episode_log_interval=100,
         opt_log_interval=10,
@@ -66,11 +70,16 @@ def main(**kwargs):
     env = wrappers.Torch(env)
 
     # build agent and optimizer
-    agent = Agent(env.observation_space, env.action_space)
+    agent = Agent(env.observation_space, env.action_space, encoder="discrete")
     optimizer = torch.optim.Adam(
         agent.parameters(), config.learning_rate * config.num_workers, betas=(0.0, 0.999)
     )
     average_reward = 0
+
+    # load state
+    # state = torch.load("./state.pth")
+    # agent.load_state_dict(state["agent"])
+    # optimizer.load_state_dict(state["optimizer"])
 
     # train
     metrics = {
@@ -221,7 +230,15 @@ def main(**kwargs):
             # writer.add_scalar(
             #     "rollout/td_error_std_normalized", td_error_std_normalized, global_step=episode
             # )
-            # writer.add_histogram("rollout/reward", rollout.reward, global_step=episode)
+
+            # torch.save(
+            #     {
+            #         "agent": agent.state_dict(),
+            #         "optimizer": optimizer.state_dict(),
+            #         "average_reward": average_reward,
+            #     },
+            #     "./state.pth",
+            # )
 
     env.close()
     writer.close()
@@ -234,8 +251,9 @@ def build_env():
         # return r * 10 - 0.02
 
     # env = gym.make("CartPole-v1")
-    env = "MiniGrid-Empty-Random-6x6-v0"
+    # env = "MiniGrid-Empty-Random-6x6-v0"
     # env = "MiniGrid-FourRooms-v0"
+    env = "MiniGrid-FourRooms-Distance-v0"
     # env = "MiniGrid-Dynamic-Obstacles-8x8-v0"
     env = gym.make(env)
     env = wrappers.RandomFirstReset(env, 256)
