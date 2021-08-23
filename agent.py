@@ -9,24 +9,29 @@ class Agent(nn.Module):
         observation_space: gym.spaces.Space,
         action_space: gym.spaces.Discrete,
         encoder,
+        num_features=64,
+        with_memory=True,
     ):
         super().__init__()
+
+        self.num_features = num_features
+        self.with_memory = with_memory
 
         if encoder == "minigrid":
             self.encoder = MiniGridEncoder(action_space)
         elif encoder == "discrete":
-            self.encoder = DiscreteEncoder(observation_space)
+            self.encoder = DiscreteEncoder(observation_space, num_features)
 
-        self.rnn = nn.LSTMCell(64, 64)
+        self.rnn = nn.LSTMCell(num_features, num_features)
         self.dist = nn.Sequential(
-            nn.Linear(64, 64),
+            nn.Linear(num_features, num_features),
             nn.Tanh(),
-            nn.Linear(64, action_space.n),
+            nn.Linear(num_features, action_space.n),
         )
         self.value = nn.Sequential(
-            nn.Linear(64, 64),
+            nn.Linear(num_features, num_features),
             nn.Tanh(),
-            nn.Linear(64, 1),
+            nn.Linear(num_features, 1),
         )
 
         self.apply(self.weight_init)
@@ -40,17 +45,20 @@ class Agent(nn.Module):
         dist = torch.distributions.Categorical(logits=self.dist(emb))
         value = self.value(emb).squeeze(1)
 
+        if not self.with_memory:
+            memory = self.reset_memory(memory, torch.ones(obs.size(0), dtype=torch.bool))
+
         return dist, value, memory
 
     def zero_memory(self, batch_size):
-        zeros = torch.zeros(batch_size, 64)
+        zeros = torch.zeros(batch_size, self.num_features)
         state = (zeros, zeros)
         return state
 
-    def reset_memory(self, state, done):
+    def reset_memory(self, memory, done):
         done = done.unsqueeze(1)
-        state = tuple(torch.where(done, torch.zeros_like(x), x) for x in state)
-        return state
+        memory = tuple(torch.where(done, torch.zeros_like(x), x) for x in memory)
+        return memory
 
     def weight_init(self, m):
         if isinstance(m, (nn.Linear, nn.Conv2d)):
@@ -59,10 +67,10 @@ class Agent(nn.Module):
 
 
 class DiscreteEncoder(nn.Module):
-    def __init__(self, observation_space: gym.spaces.Discrete):
+    def __init__(self, observation_space: gym.spaces.Discrete, num_features: int):
         super().__init__()
 
-        self.emb = nn.Embedding(observation_space.n, 64)
+        self.emb = nn.Embedding(observation_space.n, num_features)
 
     def forward(self, obs, action):
         return self.emb(obs)
