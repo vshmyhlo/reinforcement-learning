@@ -40,7 +40,7 @@ def test_n_step_bootstrapped_return_2():
     assert torch.allclose(actual, expected)
 
 
-def test_generalized_advantage_estimation():
+def test_gae():
     reward_t = torch.tensor([[1.0, 1.0, 1.0, 1.0, 1.0, 1.0]], dtype=torch.float)
     value_t = torch.tensor([[3.0, 4.0, 5.0, 3.0, 4.0, 5.0]], dtype=torch.float)
     value_prime = torch.tensor([6.0], dtype=torch.float)
@@ -50,6 +50,30 @@ def test_generalized_advantage_estimation():
         reward_t, value_t, value_prime, done_t, gamma=0.9, lambda_=0.8
     )
     expected = torch.tensor([[0.6064, -1.38, -4.0, 3.40576, 2.508, 1.4]])
+
+    assert torch.allclose(actual, expected)
+
+
+def test_gae_2():
+    reward_t = torch.ones(1, 8) * 2
+    value_t = torch.ones(1, 8) * 3
+    value_prime = torch.ones(1) * 3
+    done_t = torch.zeros(1, 8, dtype=torch.bool)
+
+    actual = utils.generalized_advantage_estimation(reward_t, value_t, value_prime, done_t, 1, 1)
+    expected = utils.n_step_bootstrapped_return(reward_t, done_t, value_prime, 1) - value_t
+
+    assert torch.allclose(actual, expected)
+
+
+def test_gae_3():
+    reward_t = torch.ones(1, 8) * 2
+    value_t = torch.ones(1, 8) * 3
+    value_prime = torch.ones(1) * 3
+    done_t = torch.zeros(1, 8, dtype=torch.bool)
+
+    actual = utils.generalized_advantage_estimation(reward_t, value_t, value_prime, done_t, 1, 0)
+    expected = torch.ones(1, 8) * 2
 
     assert torch.allclose(actual, expected)
 
