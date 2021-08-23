@@ -2,6 +2,7 @@ import click
 import gym
 import gym_minigrid
 import torch
+import torch.nn as nn
 from all_the_tools.config import Config as C
 from all_the_tools.meters import Stack
 from tensorboardX import SummaryWriter
@@ -49,12 +50,13 @@ def main(**kwargs):
         learning_rate=1e-4,
         horizon=8,
         discount=0.99,
-        num_episodes=100000,
+        num_episodes=20000,
         num_workers=16,
         entropy_weight=1e-2,
         episode_log_interval=100,
         opt_log_interval=10,
         average_reward_lr=0.001,
+        clip_grad_norm=None,
     )
     for k in kwargs:
         config[k] = kwargs[k]
@@ -64,15 +66,23 @@ def main(**kwargs):
 
     # build env
     env = VecEnv([build_env for _ in range(config.num_workers)])
-    env = wrappers.TensorboardBatchMonitor(
-        env, writer, log_interval=config.episode_log_interval, fps_mul=0.5
-    )
+    # env = wrappers.TensorboardBatchMonitor(
+    #     env, writer, log_interval=config.episode_log_interval, fps_mul=0.5
+    # )
     env = wrappers.Torch(env)
 
     # build agent and optimizer
-    agent = Agent(env.observation_space, env.action_space, encoder="discrete")
+    agent = Agent(
+        env.observation_space,
+        env.action_space,
+        encoder="discrete",
+        num_features=64,
+        memory=True,
+    )
     optimizer = torch.optim.Adam(
-        agent.parameters(), config.learning_rate * config.num_workers, betas=(0.0, 0.999)
+        agent.parameters(),
+        config.learning_rate * config.num_workers,
+        betas=(0.0, 0.999),
     )
     average_reward = 0
 
@@ -106,7 +116,7 @@ def main(**kwargs):
 
     while episode < config.num_episodes:
         history = History()
-        memory = tuple(x.detach() for x in memory)
+        memory = agent.detach_memory(memory)
 
         for i in range(config.horizon):
             transition = history.append_transition()
@@ -183,6 +193,8 @@ def main(**kwargs):
 
         optimizer.zero_grad()
         loss.sum(1).mean().backward()
+        if config.clip_grad_norm is not None:
+            nn.utils.clip_grad_norm_(agent.parameters(), config.clip_grad_norm)
         optimizer.step()
         average_reward += config.average_reward_lr * td_error.detach().sum(1).mean()
         opt_step += 1
@@ -244,23 +256,33 @@ def main(**kwargs):
     writer.close()
 
 
-def build_env():
-    def scale_reward(r):
-        return r
-        # return r * 5
-        # return r * 10 - 0.02
+# def build_env():
+#     def scale_reward(r):
+#         return r
+#         # return r * 5
+#         # return r * 10 - 0.02
+#
+#     # env = gym.make("CartPole-v1")
+#     # env = "MiniGrid-Empty-Random-6x6-v0"
+#     # env = "MiniGrid-FourRooms-v0"
+#     env = "MiniGrid-FourRooms-Distance-v0"
+#     env = "MiniGrid-FourRooms-Distance-v0"
+#     # env = "MiniGrid-Dynamic-Obstacles-8x8-v0"
+#     env = gym.make(env)
+#     env = wrappers.RandomFirstReset(env, 256)
+#     env = gym_minigrid.wrappers.OneHotPartialObsWrapper(env)
+#     env = gym_minigrid.wrappers.ImgObsWrapper(env)
+#     env = gym.wrappers.TransformReward(env, scale_reward)
+#     env.reward_range = tuple(map(scale_reward, env.reward_range))
+#     env = gym.wrappers.RecordEpisodeStatistics(env)
+#     return env
 
-    # env = gym.make("CartPole-v1")
-    # env = "MiniGrid-Empty-Random-6x6-v0"
-    # env = "MiniGrid-FourRooms-v0"
-    env = "MiniGrid-FourRooms-Distance-v0"
-    # env = "MiniGrid-Dynamic-Obstacles-8x8-v0"
+
+def build_env():
+    # env = "MemoryTest-v0"
+    env = "SeqCopy-v0"
     env = gym.make(env)
-    env = wrappers.RandomFirstReset(env, 256)
-    env = gym_minigrid.wrappers.OneHotPartialObsWrapper(env)
-    env = gym_minigrid.wrappers.ImgObsWrapper(env)
-    env = gym.wrappers.TransformReward(env, scale_reward)
-    env.reward_range = tuple(map(scale_reward, env.reward_range))
+    env = wrappers.RandomFirstReset(env, 32)
     env = gym.wrappers.RecordEpisodeStatistics(env)
     return env
 

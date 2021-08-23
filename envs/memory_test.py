@@ -35,7 +35,7 @@ gym_register(
 )
 
 
-class Copy(gym.Env):
+class SeqCopy(gym.Env):
     def __init__(self, n=5, seq_size=4):
         self.observation_space = gym.spaces.Discrete(n)
         self.action_space = gym.spaces.Discrete(n)
@@ -50,27 +50,32 @@ class Copy(gym.Env):
         return self.seq[0]
 
     def step(self, action):
-        self.i += 1
         first_phase = self.i // self.seq_size == 0
 
+        obs = 0
+        reward = 0
+        done = False
+
         if first_phase:
-            reward = 0
             if action != 0:
                 reward -= 1
-            return self.seq[self.i], reward, False, {}
+
+            if self.i + 1 < self.seq_size:
+                obs = self.seq[self.i + 1]
         else:
             i = self.i - self.seq_size
-            reward = 0
             if action == self.seq[i]:
                 reward += 1
 
-            if i < self.seq_size:
-                return 0, reward, False, {}
-            else:
-                return 0, reward, True, {}
+            if i + 1 >= self.seq_size:
+                done = True
+
+        self.i += 1
+
+        return obs, reward, done, {}
 
 
-# gym_register(
-#     id="Copy-v0",
-#     entry_point="envs:Copy",
-# )
+gym_register(
+    id="SeqCopy-v0",
+    entry_point="envs:SeqCopy",
+)
