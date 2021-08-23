@@ -57,6 +57,15 @@ def main(**kwargs):
         opt_log_interval=10,
         average_reward_lr=0.001,
         clip_grad_norm=None,
+        model=C(
+            num_features=64,
+            encoder=C(
+                type="discrete",
+            ),
+            memory=C(
+                type="lstm",
+            ),
+        ),
     )
     for k in kwargs:
         config[k] = kwargs[k]
@@ -75,9 +84,7 @@ def main(**kwargs):
     agent = Agent(
         env.observation_space,
         env.action_space,
-        encoder="discrete",
-        num_features=64,
-        memory=True,
+        **config.model,
     )
     optimizer = torch.optim.Adam(
         agent.parameters(),

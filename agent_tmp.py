@@ -10,24 +10,21 @@ class Agent(nn.Module):
         self,
         observation_space: gym.spaces.Space,
         action_space: gym.spaces.Discrete,
-        num_features,
         encoder,
-        memory,
+        num_features=64,
+        memory=True,
     ):
         super().__init__()
 
         self.num_features = num_features
         self.memory = memory
 
-        if encoder.type == "minigrid":
+        if encoder == "minigrid":
             self.encoder = MiniGridEncoder(action_space)
-        elif encoder.type == "discrete":
+        elif encoder == "discrete":
             self.encoder = DiscreteEncoder(observation_space, num_features)
 
-        if memory.type == "lstm":
-            self.rnn = LSTMCell(num_features)
-        elif memory.type == "read_write":
-            self.rnn = MemoryCell(num_features, memory_size=20)
+        self.rnn = LSTMCell(num_features)
 
         self.dist = nn.Sequential(
             nn.Linear(num_features, num_features),
@@ -55,6 +52,11 @@ class Agent(nn.Module):
 
         return dist, value, memory
 
+    def weight_init(self, m):
+        if isinstance(m, (nn.Linear, nn.Conv2d)):
+            nn.init.xavier_normal_(m.weight)
+            nn.init.constant_(m.bias, 0)
+
     def zero_memory(self, batch_size):
         return self.rnn.zero_memory(batch_size)
 
@@ -63,11 +65,6 @@ class Agent(nn.Module):
 
     def detach_memory(self, memory):
         return self.rnn.detach_memory(memory)
-
-    def weight_init(self, m):
-        if isinstance(m, (nn.Linear, nn.Conv2d)):
-            nn.init.xavier_normal_(m.weight)
-            nn.init.constant_(m.bias, 0)
 
 
 class LSTMCell(nn.Module):
@@ -80,6 +77,7 @@ class LSTMCell(nn.Module):
     def forward(self, input, memory):
         memory = self.rnn(input, memory)
         input, _ = memory
+
         return input, memory
 
     def zero_memory(self, batch_size):
@@ -94,90 +92,6 @@ class LSTMCell(nn.Module):
 
     def detach_memory(self, memory):
         return tuple(x.detach() for x in memory)
-
-
-class MemoryCell(nn.Module):
-    def __init__(self, num_features, memory_size=20):
-        super().__init__()
-
-        self.zero_mem = nn.Parameter(torch.empty(memory_size, num_features))
-        self.read = ReadModule(num_features)
-        self.write = WriteModule(num_features)
-
-        nn.init.normal_(self.zero_mem, 0, 0.1)
-
-    def forward(self, input, memory):
-        context = self.read(input, memory)
-        input = input + context
-        memory = self.write(input, memory)
-        return input, memory
-
-    def zero_memory(self, batch_size):
-        return self.zero_mem.unsqueeze(0).repeat(batch_size, 1, 1)
-
-    def reset_memory(self, memory, done):
-        batch_size = done.size(0)
-        done = done.view(batch_size, 1, 1)
-        memory = torch.where(done, self.zero_memory(batch_size), memory)
-        return memory
-
-    def detach_memory(self, memory):
-        return memory.detach()
-
-
-class ReadModule(nn.Module):
-    def __init__(self, num_features):
-        super().__init__()
-
-        self.num_features = num_features
-
-        self.query = nn.Linear(num_features, num_features)
-        self.key = nn.Linear(num_features, num_features)
-        self.value = nn.Linear(num_features, num_features)
-
-        nn.init.xavier_normal_(self.query.weight)
-        nn.init.xavier_normal_(self.key.weight)
-        nn.init.xavier_normal_(self.value.weight)
-
-    def forward(self, input, memory):
-        query = self.query(input)
-        key = self.key(memory)
-        value = self.value(memory)
-
-        score = torch.bmm(key, query.unsqueeze(2)) / math.sqrt(self.num_features)
-        score = score.softmax(1)
-
-        context = (value * score).sum(1)
-
-        return context
-
-
-class WriteModule(nn.Module):
-    def __init__(self, num_features):
-        super().__init__()
-
-        self.num_features = num_features
-
-        self.query = nn.Linear(num_features, num_features)
-        self.key = nn.Linear(num_features, num_features)
-        self.value = nn.Linear(num_features, num_features)
-
-        nn.init.xavier_normal_(self.query.weight)
-        nn.init.xavier_normal_(self.key.weight)
-        nn.init.xavier_normal_(self.value.weight)
-
-    def forward(self, input, memory):
-        query = self.query(input)
-        key = self.key(memory)
-        value = self.value(input)
-
-        score = torch.bmm(key, query.unsqueeze(2)) / math.sqrt(self.num_features)
-        score = score.softmax(1)
-
-        value = value.unsqueeze(1)
-        memory = (1 - score) * memory + score * value
-
-        return memory
 
 
 class DiscreteEncoder(nn.Module):
