@@ -7,21 +7,23 @@ from gym_minigrid.register import register
 # TODO: can it learn to go as far as possible from initial position?
 
 
-class FourRoomsDistanceEnv(MiniGridEnv):
-    """
-    Classic 4 rooms gridworld environment.
-    Can specify agent and goal position, if not it set at random.
-    """
-
+class FourRoomsCustom(MiniGridEnv):
     def __init__(self, agent_pos=None, goal_pos=None):
         self._agent_default_pos = agent_pos
         self._goal_default_pos = goal_pos
+
+        self.n_max = 15000 / 16
+        self.n = -1
+
         super().__init__(grid_size=19, max_steps=100)
 
     def reset(self):
+        self.n += 1
+
         output = super().reset()
         self.visited = set()
         # self.dist_before = 0
+
         return output
 
     def _gen_grid(self, width, height):
@@ -72,6 +74,22 @@ class FourRoomsDistanceEnv(MiniGridEnv):
             self.put_obj(goal, *self._goal_default_pos)
             goal.init_pos, goal.cur_pos = self._goal_default_pos
         else:
+            # dif = min(self.n / self.n_max, 1)
+            #
+            # w = self.grid.width * 2
+            # h = self.grid.height * 2
+            #
+            # w = 3 + dif * (w - 3)
+            # h = 3 + dif * (h - 3)
+            #
+            # top = (self.agent_pos[0] - w / 2, self.agent_pos[1] - h / 2)
+            # size = (w, h)
+            #
+            # top = tuple(round(x) for x in top)
+            # size = tuple(round(x) for x in size)
+
+            # self.goal_pos = self.place_obj(Goal(), top=top, size=size)
+
             self.goal_pos = self.place_obj(Goal())
 
         self.mission = "Reach the goal"
@@ -81,24 +99,30 @@ class FourRoomsDistanceEnv(MiniGridEnv):
         obs, reward, done, info = MiniGridEnv.step(self, action)
         pos_after = self.agent_pos
 
-        reward *= 10
+        # init
+        reward_extra = reward * 10 - reward
+
+        # panalize if failed
         if done and reward == 0:
-            reward -= 1
+            reward_extra -= 1
 
-        reward += dist(pos_before, self.goal_pos) - dist(pos_after, self.goal_pos)
+        # reward if closer to goal
+        reward_extra += dist(pos_before, self.goal_pos) - dist(pos_after, self.goal_pos)
 
-        reward -= 0.01
-        # if eq(pos_before, pos_after):
-        #     reward -= 0.1
+        # penalise for extra steps
+        reward_extra -= 0.01
+
+        # penalise for revisiting states
         if tuple(pos_after) in self.visited:
-            reward -= 0.1
+            reward_extra -= 0.1
         else:
             self.visited.add(tuple(pos_after))
             floor = Floor()
             self.put_obj(floor, *pos_after)
 
-        # visited_mean = np.array(list(self.visited)).mean(0)
-        # reward += dist(pos_after, visited_mean) - dist(pos_before, visited_mean)
+        # final reward
+        dif = 1 - min(self.n / self.n_max, 1)
+        reward = reward + dif * reward_extra
 
         return obs, reward, done, info
 
@@ -112,6 +136,6 @@ def eq(av, bv):
 
 
 register(
-    id="MiniGrid-FourRooms-Distance-v0",
-    entry_point="envs:FourRoomsDistanceEnv",
+    id="MiniGrid-FourRooms-Custom-v0",
+    entry_point="envs:FourRoomsCustom",
 )

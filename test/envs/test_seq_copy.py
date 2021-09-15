@@ -1,4 +1,4 @@
-from envs.memory_test import SeqCopy
+from envs import SeqCopy
 
 
 def test_copy_good():

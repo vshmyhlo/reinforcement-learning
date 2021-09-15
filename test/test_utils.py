@@ -55,10 +55,12 @@ def test_gae():
 
 
 def test_gae_2():
-    reward_t = torch.ones(1, 8) * 2
-    value_t = torch.ones(1, 8) * 3
+    t = 5
+    reward_t = torch.ones(1, t) * 2
+    value_t = torch.ones(1, t) * 3
     value_prime = torch.ones(1) * 3
-    done_t = torch.zeros(1, 8, dtype=torch.bool)
+    done_t = torch.zeros(1, t, dtype=torch.bool)
+    done_t[:, 2] = True
 
     actual = utils.generalized_advantage_estimation(reward_t, value_t, value_prime, done_t, 1, 1)
     expected = utils.n_step_bootstrapped_return(reward_t, done_t, value_prime, 1) - value_t
@@ -67,15 +69,34 @@ def test_gae_2():
 
 
 def test_gae_3():
-    reward_t = torch.ones(1, 8) * 2
-    value_t = torch.ones(1, 8) * 3
+    t = 5
+    reward_t = torch.ones(1, t) * 2
+    value_t = torch.ones(1, t) * 3
     value_prime = torch.ones(1) * 3
-    done_t = torch.zeros(1, 8, dtype=torch.bool)
+    done_t = torch.zeros(1, t, dtype=torch.bool)
+    done_t[:, 2] = True
 
     actual = utils.generalized_advantage_estimation(reward_t, value_t, value_prime, done_t, 1, 0)
-    expected = torch.ones(1, 8) * 2
+    expected = torch.ones(1, t) * 2
+    expected[:, 2] = -1
 
     assert torch.allclose(actual, expected)
+
+
+def test_gae_4():
+    t = 5
+    reward_t = torch.ones(1, t)
+    value_t = torch.arange(1, t + 1).flip(0).unsqueeze(0)
+    value_prime = torch.zeros(1)
+    done_t = torch.zeros(1, t, dtype=torch.bool)
+
+    for l in torch.linspace(0, 1):
+        actual = utils.generalized_advantage_estimation(
+            reward_t, value_t, value_prime, done_t, 1, l
+        )
+        expected = torch.zeros(1, t)
+
+        assert torch.allclose(actual, expected)
 
 
 def gae_ref(reward_t, value_t, value_prime, done_t, gamma, lambda_):

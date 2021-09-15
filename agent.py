@@ -27,7 +27,7 @@ class Agent(nn.Module):
         if memory.type == "lstm":
             self.rnn = LSTMCell(num_features)
         elif memory.type == "read_write":
-            self.rnn = MemoryCell(num_features, memory_size=20)
+            self.rnn = MemoryCell(num_features, memory_size=memory.size)
 
         self.dist = nn.Sequential(
             nn.Linear(num_features, num_features),
@@ -50,6 +50,7 @@ class Agent(nn.Module):
         dist = torch.distributions.Categorical(logits=self.dist(emb))
         value = self.value(emb).squeeze(1)
 
+        # TODO:
         if not self.memory:
             memory = self.reset_memory(memory, torch.ones(obs.size(0), dtype=torch.bool))
 
@@ -96,8 +97,43 @@ class LSTMCell(nn.Module):
         return tuple(x.detach() for x in memory)
 
 
+class LSTMCell2(nn.Module):
+    def __init__(self, num_features):
+        super().__init__()
+
+        self.num_features = num_features
+        self.rnn1 = nn.LSTMCell(num_features, num_features)
+        self.rnn2 = nn.LSTMCell(num_features, num_features)
+
+    def forward(self, input, memory):
+        memory1, memory2 = memory[:2], memory[2:]
+
+        memory1 = self.rnn1(input, memory1)
+        input, _ = memory1
+
+        memory2 = self.rnn2(input, memory2)
+        input, _ = memory2
+
+        memory = memory1 + memory2
+
+        return input, memory
+
+    def zero_memory(self, batch_size):
+        zeros = torch.zeros(batch_size, self.num_features)
+        state = (zeros, zeros, zeros, zeros)
+        return state
+
+    def reset_memory(self, memory, done):
+        done = done.unsqueeze(1)
+        memory = tuple(torch.where(done, torch.zeros_like(x), x) for x in memory)
+        return memory
+
+    def detach_memory(self, memory):
+        return tuple(x.detach() for x in memory)
+
+
 class MemoryCell(nn.Module):
-    def __init__(self, num_features, memory_size=20):
+    def __init__(self, num_features, memory_size):
         super().__init__()
 
         self.zero_mem = nn.Parameter(torch.empty(memory_size, num_features))
