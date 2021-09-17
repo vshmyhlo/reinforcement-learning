@@ -57,13 +57,12 @@ All float observations (including booleans which are treated as floats that happ
 For each observation, we keep a running mean and standard deviation of all data ever observed; at each timestep we subtract the mean and divide by the st dev, clipping the final result to be within (-5, 5).
 """
 
-# TODO: check batch-size aggregation and learning-rate
+
 # TODO: plot over opt steps, not episodes
 # TODO: data staleness and sample-reuse
 # TODO: how LSTM hidden state is stored in rollouts and how it is used for optimisation
 # TODO: test multi-agent communication
 # TODO: do evaluation run every n steps
-
 # TODO: log over samples processed to emphasize sample-efficiency
 # TODO: use graph-generative model for program synthesis
 
@@ -76,8 +75,8 @@ def main(**kwargs):
         learning_rate=1e-3,
         horizon=16,
         discount=0.995,
-        num_episodes=10000,
-        num_workers=256,
+        num_observations=1000000,
+        num_workers=32,
         entropy_weight=1e-2,
         episode_log_interval=100,
         opt_log_interval=10,
@@ -138,9 +137,9 @@ def main(**kwargs):
         "rollout/loss": Stack(),
     }
 
-    episode = 0
     opt_step = 0
-    pbar = tqdm(total=config.num_episodes)
+    observation_step = 0
+    pbar = tqdm(total=config.num_observations)
 
     env.seed(config.random_seed)
     obs = env.reset()
@@ -149,7 +148,7 @@ def main(**kwargs):
 
     # r_stats = utils.RunningStats()
 
-    while episode < config.num_episodes:
+    while observation_step < config.num_observations:
         history = History()
         memory = agent.detach_memory(memory)
 
@@ -162,6 +161,9 @@ def main(**kwargs):
             transition.record(log_prob=dist.log_prob(action))
 
             obs_prime, reward, done, info = env.step(action)
+            observation_step += config.num_workers
+            pbar.update(config.num_workers)
+
             # for r in reward:
             #     r_stats.push(r)
             # reward = reward / r_stats.standard_deviation()
@@ -173,25 +175,9 @@ def main(**kwargs):
             for i in info:
                 if "episode" not in i:
                     continue
-                episode += 1
 
                 metrics["episode/return"].update(i["episode"]["r"])
                 metrics["episode/length"].update(i["episode"]["l"])
-
-                if episode % config.episode_log_interval == 0:
-                    print("log episode")
-
-                    # for k in [
-                    #     "episode/return",
-                    #     "episode/length",
-                    # ]:
-                    #     v = metrics[k].compute_and_reset()
-                    #     writer.add_scalar(f"{k}/mean", v.mean(), global_step=episode)
-                    #     writer.add_histogram(f"{k}/hist", v, global_step=episode)
-
-                    writer.flush()
-
-                pbar.update()
 
         rollout = history.build()
 
@@ -249,14 +235,15 @@ def main(**kwargs):
         metrics["rollout/loss"].update(loss.detach())
 
         if opt_step % config.opt_log_interval == 0:
-            # td_error_std_normalized = td_error.std() / value_target.std()
-            print("log rollout")
+            print("log metrics")
 
-            writer.add_scalar("rollout/average_reward", average_reward, global_step=opt_step)
+            writer.add_scalar(
+                "rollout/average_reward", average_reward, global_step=observation_step
+            )
             grad_norm = torch.norm(
                 torch.stack([torch.norm(p.grad.detach(), 2.0) for p in agent.parameters()]), 2.0
             )
-            writer.add_scalar("rollout/grad_norm", grad_norm, global_step=opt_step)
+            writer.add_scalar("rollout/grad_norm", grad_norm, global_step=observation_step)
 
             for k in [
                 "rollout/reward",
@@ -265,8 +252,8 @@ def main(**kwargs):
                 "rollout/td_error",
             ]:
                 v = metrics[k].compute_and_reset()
-                writer.add_scalar(f"{k}/mean", v.mean(), global_step=opt_step)
-                writer.add_histogram(f"{k}/hist", v, global_step=opt_step)
+                writer.add_scalar(f"{k}/mean", v.mean(), global_step=observation_step)
+                writer.add_histogram(f"{k}/hist", v, global_step=observation_step)
 
             for k in [
                 "rollout/entropy",
@@ -275,21 +262,17 @@ def main(**kwargs):
                 "rollout/loss",
             ]:
                 v = metrics[k].compute_and_reset()
-                writer.add_scalar(f"{k}/mean", v.mean(), global_step=opt_step)
+                writer.add_scalar(f"{k}/mean", v.mean(), global_step=observation_step)
 
             for k in [
                 "episode/return",
                 "episode/length",
             ]:
                 v = metrics[k].compute_and_reset()
-                writer.add_scalar(f"{k}/mean", v.mean(), global_step=opt_step)
-                writer.add_histogram(f"{k}/hist", v, global_step=opt_step)
+                writer.add_scalar(f"{k}/mean", v.mean(), global_step=observation_step)
+                writer.add_histogram(f"{k}/hist", v, global_step=observation_step)
 
             writer.flush()
-
-            # writer.add_scalar(
-            #     "rollout/td_error_std_normalized", td_error_std_normalized, global_step=opt_step
-            # )
 
             # torch.save(
             #     {
