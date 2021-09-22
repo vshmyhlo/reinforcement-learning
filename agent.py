@@ -28,6 +28,8 @@ class Agent(nn.Module):
             self.rnn = LSTMCell(num_features)
         elif memory.type == "read_write":
             self.rnn = MemoryCell(num_features, memory_size=memory.size)
+        elif memory.type == "transformer":
+            self.rnn = TransformerCell(num_features)
 
         self.dist = nn.Sequential(
             nn.Linear(num_features, num_features),
@@ -69,6 +71,57 @@ class Agent(nn.Module):
         if isinstance(m, (nn.Linear, nn.Conv2d)):
             nn.init.xavier_normal_(m.weight)
             nn.init.constant_(m.bias, 0)
+
+
+class TransformerCell(nn.Module):
+    def __init__(self, num_features):
+        super().__init__()
+
+        self.num_feaures = num_features
+
+        self.query = nn.Linear(num_features, num_features)
+        self.key = nn.Linear(num_features, num_features)
+        self.value = nn.Linear(num_features, num_features)
+
+        nn.init.normal_(self.query.weight, 0, 0.01)
+        nn.init.normal_(self.key.weight, 0, 0.01)
+        nn.init.normal_(self.value.weight, 0, 0.01)
+
+    def forward(self, input, memory):
+        s, z = memory
+
+        query = self.phi(self.query(input)).unsqueeze(1)
+        key = self.phi(self.key(input)).unsqueeze(2)
+        value = self.value(input).unsqueeze(1)
+
+        s = s + torch.bmm(key, value)
+        z = z + key
+        # print(s.shape, z.shape)
+
+        num = torch.matmul(query, s)
+        denom = torch.matmul(query, z)
+        # print(num.shape, denom.shape)
+        input = torch.relu((num / denom).squeeze(1) + input)
+        # print(input.shape)
+
+        return input, (s, z)
+
+    def phi(self, input):
+        elu = nn.ELU()
+        return elu(input) + 1
+
+    def zero_memory(self, batch_size):
+        s = torch.zeros(batch_size, self.num_feaures, self.num_feaures)
+        z = torch.zeros(batch_size, self.num_feaures, 1)
+        return s, z
+
+    def reset_memory(self, memory, done):
+        done = done.view(done.size(0), 1, 1)
+        memory = tuple(torch.where(done, torch.zeros_like(x), x) for x in memory)
+        return memory
+
+    def detach_memory(self, memory):
+        return tuple(x.detach() for x in memory)
 
 
 class LSTMCell(nn.Module):

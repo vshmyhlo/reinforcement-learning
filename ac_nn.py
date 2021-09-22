@@ -17,8 +17,6 @@ from vec_env_serial import VecEnv
 
 torch.autograd.set_detect_anomaly(True)
 
-# TODO: test memory by remembering sequence of states
-
 
 # TODO: log dist of resets on each step
 # TODO: seed
@@ -40,6 +38,8 @@ torch.autograd.set_detect_anomaly(True)
 # TODO: log training steps
 # TODO: log finished eps as a function of opt steps
 # TODO: how average reward is derived
+# TODO: eligibility traces
+# TODO: linear transformer RNN
 
 
 """
@@ -65,6 +65,7 @@ For each observation, we keep a running mean and standard deviation of all data 
 # TODO: do evaluation run every n steps
 # TODO: log over samples processed to emphasize sample-efficiency
 # TODO: use graph-generative model for program synthesis
+# TODO: residual in transformer?
 
 
 @click.command()
