@@ -9,3 +9,21 @@ force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
 line_length = 99
+
+[tool.poetry]
+name = "reinforcement-learning"
+version = "0.1.0"
+description = ""
+authors = ["Vlad Shmyhlo <aion.stu@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+numpy = "^1.23.2"
+torch = "^1.12.1"
+pytest = "^7.1.2"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
