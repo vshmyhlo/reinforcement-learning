@@ -19,7 +19,7 @@ authors = ["Vlad Shmyhlo <aion.stu@gmail.com>"]
 [tool.poetry.dependencies]
 python = "^3.8"
 numpy = "^1.23.2"
-torch = "^1.12.1"
+torch = "^2.2.0"
 pytest = "^7.1.2"
 
 [tool.poetry.dev-dependencies]
